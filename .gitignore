@@ -26,6 +26,35 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Model files (large files)
+*.h5
+*.hdf5
+*.pt
+*.pth
+*.pb
+*.keras
+
+models/car_classification_savedmodel/
+*.ckpt
+checkpoints/
+
+# Data files
+data/train/
+data/test/
+data/*.mat
+data/*.zip
+data/*.tar.gz
+
+# CUDA installation packages (platform-specific, should be downloaded fresh)
+*.deb
+*.rpm
+*.pkg
+*.msi
+
+# Logs
+logs/
+*.log
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.

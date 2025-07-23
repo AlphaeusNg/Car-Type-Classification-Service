@@ -1,0 +1,54 @@
+# Core dependencies - Verified from model_training_detailed.ipynb output
+# Compatible with Python 3.9-3.12 (tested with Python 3.12.3)
+tensorflow==2.19.0
+
+# TensorFlow ecosystem (exact versions from working environment)
+tensorboard==2.19.0
+keras==3.10.0
+tensorboard-data-server==0.7.2
+
+# Note: For GPU support, ensure CUDA 12.x and cuDNN are installed
+# CUDA Installation Guide: https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=24.04&target_type=deb_network
+# For other OS/versions, visit: https://developer.nvidia.com/cuda-downloads
+# This version works on Linux, WSL2, and Windows natively
+
+# API dependencies (verified versions)
+fastapi==0.116.1
+uvicorn==0.35.0
+python-multipart==0.0.6
+starlette==0.47.2
+pydantic==2.11.7
+pydantic_core==2.33.2
+
+# Image processing
+Pillow==10.0.0
+
+# Data science and ML (exact working versions)
+numpy==1.26.4
+scikit-learn==1.7.1
+matplotlib==3.10.3
+seaborn==0.13.2
+pandas==2.3.1
+scipy==1.16.0
+
+# Jupyter notebook support (exact working versions)
+jupyter==1.0.0
+ipykernel==6.25.2
+notebook==7.0.3
+jupyterlab==4.4.5
+ipython==9.4.0
+
+# Data loading and processing
+joblib==1.5.1
+
+# Dataset download
+kaggle==1.7.4.5
+
+# Additional utilities (exact working versions)
+requests==2.31.0
+python-dotenv==1.0.0
+tqdm==4.67.1
+
+# Development and testing
+pytest==7.4.2
+pytest-asyncio==0.21.1
