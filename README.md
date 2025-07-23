@@ -1,15 +1,16 @@
 # Car Type Classification Service
 
-A deep learning image classification service for car types using a ResNet50-based model trained on the Stanford Cars Dataset. This project fulfills a complete model training in Jupyter notebook, REST API deployment, and Docker containerization.
+A deep learning service for car type classification using ResNet50 with transfer learning. Trained on the Stanford Cars Dataset (196 classes) with complete model training, REST API, and Docker deployment.
 
-## � Project Overview
+## 🎯 Project Overview
 
-This service classifies car images into 196 different car types (make, model, year combinations) using a transfer learning approach with ResNet50 backbone. The complete solution includes:
+This service classifies car images into 196 different car types using transfer learning with ResNet50 backbone:
 
-- **Deep Learning Model**: ResNet50 with transfer learning trained on Stanford Cars Dataset
-- **REST API**: FastAPI service with `/predict` endpoint
-- **Docker Support**: Complete containerization for deployment
-- **Jupyter Training**: Comprehensive model training notebook
+- **Model**: ResNet50 with transfer learning (TensorFlow 2.19.0)
+- **Dataset**: Stanford Cars Dataset (196 classes)
+- **API**: FastAPI service with `/predict` endpoint  
+- **Deployment**: Docker containerization support
+- **Training**: Complete Jupyter notebook implementation
 
 ## 🏗️ Project Structure
 
@@ -53,10 +54,10 @@ python3 run.py --setup
 jupyter notebook model_training.ipynb
 
 # Run all cells to:
-# - Load and preprocess Stanford Cars dataset
-# - Train ResNet50-based model
-# - Generate evaluation metrics
-# - Save model files (best_car_model.keras, class_mapping.json)
+# - Download and preprocess Stanford Cars dataset
+# - Train ResNet50-based model with transfer learning
+# - Evaluate performance and generate metrics
+# - Save model (car_classification_model.h5) and class mapping
 ```
 
 ### 3. Run the API
@@ -145,39 +146,56 @@ curl -X POST "http://localhost:8000/predict" \
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-## 🔧 Technical Details
+## 🧠 Model Architecture
 
-### Model Architecture
-- **Framework**: TensorFlow 2.19.0 with Keras
-- **Base Model**: ResNet50 pre-trained on ImageNet
-- **Input Size**: 224×224×3 RGB images
-- **Classes**: 196 Stanford Cars dataset classes
-- **Training**: Transfer learning with fine-tuning
-- **Data Split**: 80% training, 20% validation
+### Design
+- **Backbone**: ResNet50 pre-trained on ImageNet
+- **Input**: 224×224×3 RGB images
+- **Output**: 196 car classes (softmax)
+- **Training**: Two-phase transfer learning
 
-### API Framework
-- **Framework**: FastAPI 0.116.1
-- **Server**: Uvicorn ASGI server
-- **Image Processing**: Pillow for image preprocessing
-- **Model Loading**: TensorFlow model loading utilities
+### Training Strategy
+1. **Phase 1**: Frozen backbone, train classifier head (15 epochs)
+2. **Phase 2**: Fine-tune top layers with lower learning rate (10 epochs)
 
-### Deployment
-- **Container**: Python 3.12-slim base image
-- **Port**: 8000 (configurable)
-- **Health Checks**: Built-in health monitoring
-- **Error Handling**: Comprehensive error responses
-
-## 📊 Model Performance
-
-Performance metrics are generated in the notebook:
-- **Training Accuracy**: ~95%+ 
-- **Validation Accuracy**: ~50%+
-- **Top-5 Accuracy**: ~75%+
-- **Training Plots**: Loss and accuracy curves
+### Performance
+- **Training Accuracy**: ~99%+
+- **Validation Accuracy**: ~57%+  
+- **Top-5 Accuracy**: ~84%+
+- **Model Size**: ~172MB (.h5 format)
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
+
+**Environment Setup:**
+```bash
+python run.py --setup  # Reset environment if issues occur
+```
+
+**Port Already in Use:**
+```bash
+python run.py --mode local --port 8080  # Use different port
+```
+
+**Missing Model Files:**
+- Run `model_training.ipynb` notebook first to generate required model files
+- Ensure `best_car_model.keras` and `class_mapping.json` exist
+
+**Docker Issues:**
+```bash
+docker system prune -a  # Clear Docker cache
+docker build --no-cache -t car-classification-service .  # Force rebuild
+```
+
+**GPU Setup (Optional):**
+```bash
+# Check GPU availability
+python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+
+# Use CPU-only if needed
+export CUDA_VISIBLE_DEVICES=""
+```
 
 **Environment Setup:**
 ```bash
