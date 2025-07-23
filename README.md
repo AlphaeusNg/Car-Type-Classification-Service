@@ -134,8 +134,8 @@ curl http://localhost:8000/health
 curl -X POST "http://localhost:8000/predict" \
      -H "accept: application/json" \
      -H "Content-Type: multipart/form-data" \
-     -F "image=@path/to/car/image.jpg"
-```
+     -F "image=@data/test/BMW 1 Series Coupe 2012/002240.jpg"
+``` # Model has a bias for "Audi TTS Coupe 2012" Category data/test/Audi TTS Coupe 2012/001096.jpg
 
 **Response Format:**
 ```json

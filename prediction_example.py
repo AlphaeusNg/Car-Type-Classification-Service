@@ -66,7 +66,7 @@ def predict_car_type(image_path, model_path='best_car_model.keras',
 # Example usage:
 if __name__ == "__main__":
     # Test with a sample image (replace with your image path)
-    image_path = "data/test/BMW M3 Coupe 2012/00001.jpg"  # Example path
+    image_path = "data/test/Audi TTS Coupe 2012/001096.jpg"  # Example path
 
     try:
         result = predict_car_type(image_path)
