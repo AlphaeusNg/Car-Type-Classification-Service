@@ -66,9 +66,24 @@ pip install -r requirements.txt
 
 ## 🚀 Running the Project
 
-### Quick Start with `run.py` (Recommended)
+### 1. Model Training
+Launch Jupyter notebook and run the training pipeline:
 
-The project includes a comprehensive `run.py` script that handles all setup and deployment tasks:
+```bash
+# Start Jupyter notebook or open local .ipynb editor
+jupyter notebook
+
+# Open model_training.ipynb and run all cells
+# The notebook will:
+# - Load and preprocess Stanford Cars dataset
+# - Define ResNet50-based model architecture
+# - Train the model with data augmentation
+# - Generate evaluation metrics and confusion matrix
+# - Save model as car_classification_model.h5
+# - Export package versions for reproducibility
+```
+
+### Quick Start with `run.py` (Recommended)
 
 ```bash
 # Interactive mode - choose your deployment option
@@ -84,24 +99,7 @@ python run.py --mode local --port 8080   # Run on custom port
 
 ### Manual Setup (Alternative)
 
-#### 1. Model Training
-Launch Jupyter notebook and run the training pipeline:
-
-```bash
-# Start Jupyter notebook
-jupyter notebook
-
-# Open model_training.ipynb and run all cells
-# The notebook will:
-# - Load and preprocess Stanford Cars dataset
-# - Define ResNet50-based model architecture
-# - Train the model with data augmentation
-# - Generate evaluation metrics and confusion matrix
-# - Save model as car_classification_model.h5
-# - Export package versions for reproducibility
-```
-
-#### 2. API Development (Local)
+#### 1. API Development (Local)
 ```bash
 # Run the API locally
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -110,7 +108,7 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 # Interactive docs at: http://localhost:8000/docs
 ```
 
-#### 3. Docker Deployment
+#### 2. Docker Deployment
 ```bash
 # Build Docker image
 docker build -t car-classification-service .
