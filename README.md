@@ -32,7 +32,7 @@ This service classifies car images into 196 different car types (make, model, ye
 
 ### Prerequisites
 
-- Python 3.8+ (Python 3.11 recommended)
+- Python 3.12
 - pip or conda package manager
 - Docker (for containerization)
 - 4GB+ RAM (8GB+ recommended for training)
@@ -42,7 +42,7 @@ This service classifies car images into 196 different car types (make, model, ye
 #### Option 1: Virtual Environment (Recommended)
 ```bash
 # Create virtual environment
-python -m venv .venv
+python3 -m venv .venv
 
 # Activate virtual environment
 # On Linux/WSL2:
@@ -57,7 +57,7 @@ pip install -r requirements.txt
 #### Option 2: Conda Environment
 ```bash
 # Create conda environment
-conda create -n car-classification python=3.11
+conda create -n car-classification python=3.12
 conda activate car-classification
 
 # Install dependencies
