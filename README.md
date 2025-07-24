@@ -107,9 +107,9 @@ curl -X POST "http://localhost:8000/predict" \
 | Metric | Score |
 |--------|-------|
 | Training Accuracy | 99%+ |
-| Validation Accuracy | 57%+ |
-| Top-5 Accuracy | 84%+ |
-| Model Size | 172MB |
+| Validation Accuracy | 58.69% |
+| Top-5 Accuracy | 84.39% |
+| Model Size | 172.64MB |
 
 ## � Troubleshooting
 
