@@ -8,7 +8,6 @@ import os
 import sys
 import subprocess
 import argparse
-import time
 from pathlib import Path
 
 # Configuration
@@ -98,12 +97,10 @@ def setup_environment():
     else:
         print(f"{Colors.GREEN}   ✅ Virtual environment already exists{Colors.END}")
     
-    # Activate environment and install dependencies
+    # Determine pip command based on OS
     if os.name == 'nt':  # Windows
-        activate_cmd = '.venv\\Scripts\\activate'
         pip_cmd = '.venv\\Scripts\\pip'
     else:  # Linux/macOS
-        activate_cmd = 'source .venv/bin/activate'
         pip_cmd = '.venv/bin/pip'
     
     run_command(f'{pip_cmd} install --upgrade pip', 'Upgrading pip')

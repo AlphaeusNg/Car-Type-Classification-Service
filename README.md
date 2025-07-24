@@ -1,267 +1,196 @@
 # Car Type Classification Service
 
-A deep learning service for car type classification using ResNet50 with transfer learning. Trained on the Stanford Cars Dataset (196 classes) with complete model training, REST API, and Docker deployment.
+A production-ready deep learning service that classifies car images into 196 car types using ResNet50 transfer learning.
 
-## 🎯 Project Overview
+## 🎯 Overview
 
 This service classifies car images into 196 different car types using transfer learning with ResNet50 backbone:
 
-- **Model**: ResNet50 with transfer learning (TensorFlow 2.19.0)
-- **Dataset**: Stanford Cars Dataset (196 classes)
-- **API**: FastAPI service with `/predict` endpoint  
-- **Deployment**: Docker containerization support
-- **Training**: Complete Jupyter notebook implementation
+- **🧠 Model**: ResNet50 + transfer learning (TensorFlow 2.19.0)
+- **📊 Dataset**: Stanford Cars (196 classes, 16K+ images)
+- **🚀 API**: FastAPI with `/predict` endpoint
+- **🐳 Deploy**: Docker containerization
+- **📝 Training**: Complete Jupyter notebook pipeline
 
 ## 🏗️ Project Structure
 
 ```
-├── model_training.ipynb           # Main training notebook (REQUIRED)
-├── api/                          # API source code (REQUIRED)
-│   ├── __init__.py
-│   ├── main.py                   # FastAPI application
-│   └── utils.py                  # Preprocessing and model utilities
-├── Dockerfile                    # Container configuration (REQUIRED)
-├── requirements.txt              # Python dependencies (REQUIRED)
-├── README.md                     # Documentation (REQUIRED)
-├── run.py                        # Automated setup and deployment script
-├── best_car_model.keras          # Trained model (generated)
-├── class_mapping.json           # Class index mapping (generated)
-└── data/                        # Stanford Cars dataset
-    ├── train/                   # Training images
-    └── test/                    # Test images
+├── model_training.ipynb          # 📓 Complete training pipeline
+├── gpu_setup_guide.ipynb         # 📓 GPU setup and debugging
+├── api/                          # 🚀 FastAPI service
+│   ├── main.py                   #   └── REST API endpoints
+│   └── utils.py                  #   └── Model utilities
+├── run.py                        # ⚡ One-command setup & deploy
+├── requirements.txt              # 📦 Python dependencies
+├── README.md                     # 📄Documentation
+├── Dockerfile                    # 🐳 Container configuration
+├── best_car_model.keras          # 🧠 Trained model (auto-generated)
+├── class_mapping.json            # 🏷️ Class labels (auto-generated)
+└── data/                         # 📁 Stanford Cars dataset
+    ├── train/                    #   └── Training images (8K)
+    └── test/                     #   └── Test images (8K)
 ```
 
-## � Quick Start
+## ⚡ Quick Start
 
 ### Prerequisites
-- Python 3.12+
-- Docker (optional, for containerized deployment)
-- 4GB+ RAM (8GB+ recommended for training)
+- Python 3.12+ (recommended: 3.12)
+- 4GB RAM (8GB+ recommended for training)
+- Docker (optional)
 
-### 1. Setup Environment (Recommended)
+### 1. One-Command Setup
 ```bash
-# Clone the repository
 git clone https://github.com/AlphaeusNg/Car-Type-Classification-Service.git
 cd Car-Type-Classification-Service
-
-# Auto-setup environment and dependencies
-python3 run.py --setup
+python3 run.py --setup  # Auto-installs everything
 ```
 
-### 2. Train the Model
+### 2. Train Model
 ```bash
-# Launch Jupyter notebook
+# Jupyter Notebook (Interactive)
 jupyter notebook model_training.ipynb
 
-# Run all cells to:
-# - Download and preprocess Stanford Cars dataset
-# - Train ResNet50-based model with transfer learning
-# - Evaluate performance and generate metrics
-# - Save model (car_classification_model.h5) and class mapping
 ```
 
-### 3. Run the API
-
-#### Option A: Quick Start with run.py
+### 3. Start API
 ```bash
-python3 run.py --mode local    # Run locally on port 8000
-python3 run.py --mode docker   # Run in Docker container
+python3 run.py --mode local    # Local development
+python3 run.py --mode docker   # Docker deployment
 ```
 
-#### Option B: Manual Setup
-```bash
-# Local development
-uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Docker deployment
-docker build -t car-classification-service .
-docker run -p 8000:8000 car-classification-service
-```
-
-### Alternative Environment Setup
-
-If you prefer manual setup:
-
-**Python Virtual Environment:**
-```bash
-python3 -m venv .venv
-source .venv/bin/activate  # Linux/WSL2
-# .venv\Scripts\activate   # Windows
-pip install -r requirements.txt
-```
-
-**Conda Environment:**
-```bash
-conda create -n car-classification python=3.12
-conda activate car-classification
-pip install -r requirements.txt
-```
+That's it! API runs at **http://localhost:8000** 🎉
 
 ## 🔌 API Usage
 
-### Health Check
+### Test the Service
 ```bash
+# Health check
 curl http://localhost:8000/health
-```
 
-### Car Type Prediction
-```bash
+# Predict car type
 curl -X POST "http://localhost:8000/predict" \
      -H "Content-Type: multipart/form-data" \
      -F "image=@data/test/Acura TL Sedan 2012/000197.jpg"
 ```
 
-**Response Format:**
+### Response Format
 ```json
 {
-   "predicted_class": "Acura TL Sedan 2012",
-   "confidence": 0.2989,
-   "top5_predictions": [
-      {
-         "class": "Acura TL Sedan 2012",
-         "confidence": 0.2989
-      },
-      {
-         "class": "Chevrolet Malibu Hybrid Sedan 2010",
-         "confidence": 0.2387
-      },
-      {
-         "class": "Cadillac SRX SUV 2012",
-         "confidence": 0.0466
-      },
-      {
-         "class": "Audi A5 Coupe 2012",
-         "confidence": 0.0443
-      },
-      {
-         "class": "Hyundai Genesis Sedan 2012",
-         "confidence": 0.0366
-      }
-   ],
-   "status": "success"
+  "predicted_class": "Acura TL Sedan 2012",
+  "confidence": 0.2989,
+  "top5_predictions": [
+    {"class": "Acura TL Sedan 2012", "confidence": 0.2989},
+    {"class": "Chevrolet Malibu Hybrid Sedan 2010", "confidence": 0.2387},
+    {"class": "Cadillac SRX SUV 2012", "confidence": 0.0466}
+  ],
+  "status": "success"
 }
 ```
 
-**Interactive Documentation:**
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+### Interactive Documentation
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
-## 🧠 Model Architecture
+## 🧠 Model Details
 
-### Design
-- **Backbone**: ResNet50 pre-trained on ImageNet
-- **Input**: 224×224×3 RGB images
+### Architecture
+- **Base**: ResNet50 (pre-trained on ImageNet)
+- **Input**: 224×224 RGB images  
 - **Output**: 196 car classes (softmax)
-- **Training**: Two-phase transfer learning
+- **Size**: ~172MB
 
-### Training Strategy
-1. **Phase 1**: Frozen backbone, train classifier head (15 epochs)
-2. **Phase 2**: Fine-tune top layers with lower learning rate (10 epochs)
+### Training Pipeline
+1. **Phase 1** (~25 epochs): Frozen backbone + train classifier
+2. **Phase 2** (~15 epochs): Fine-tune top layers with lower LR
 
-### Performance
-- **Training Accuracy**: ~99%+
-- **Validation Accuracy**: ~57%+  
-- **Top-5 Accuracy**: ~84%+
-- **Model Size**: ~172MB (.h5 format)
+### Performance Metrics
+| Metric | Score |
+|--------|-------|
+| Training Accuracy | 99%+ |
+| Validation Accuracy | 57%+ |
+| Top-5 Accuracy | 84%+ |
+| Model Size | 172MB |
 
-## 🐛 Troubleshooting
+## � Troubleshooting
 
 ### Common Issues
 
-**Environment Setup:**
+**🚨 "Model not found"**
 ```bash
-python run.py --setup  # Reset environment if issues occur
+# Train model first
+jupyter notebook model_training.ipynb
+# Or use: python refactored_training.py
 ```
 
-**Port Already in Use:**
+**🚨 "Port already in use"**
 ```bash
 python run.py --mode local --port 8080  # Use different port
 ```
 
-**Missing Model Files:**
-- Run `model_training.ipynb` notebook first to generate required model files
-- Ensure `best_car_model.keras` and `class_mapping.json` exist
-
-**Docker Issues:**
+**🚨 "Environment issues"**
 ```bash
-docker system prune -a  # Clear Docker cache
-docker build --no-cache -t car-classification-service .  # Force rebuild
+python run.py --setup  # Reset environment
 ```
 
-**GPU Setup (Optional):**
+**🚨 "Docker problems"**
+```bash
+docker system prune -a  # Clear cache
+docker build --no-cache -t car-classification-service .
+```
+
+### GPU Setup (Optional)
 ```bash
 # Check GPU availability
 python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 
-# Use CPU-only if needed
+# Force CPU-only mode
 export CUDA_VISIBLE_DEVICES=""
 ```
 
-**Environment Setup:**
-```bash
-python3 run.py --setup  # Reset environment if issues occur
-```
+## ✅ Features Checklist
 
-**Port Already in Use:**
-```bash
-python3 run.py --mode local --port 8080  # Use different port
-```
+**Core Requirements**
+- ✅ `model_training.ipynb` - Interactive training notebook
+- ✅ `refactored_training.py` - Production training script  
+- ✅ Stanford Cars dataset support (196 classes)
+- ✅ ResNet50 + transfer learning architecture
+- ✅ Complete training pipeline with metrics
+- ✅ Model export (`.keras` + `.h5` formats)
+- ✅ FastAPI service with `/predict` endpoint
+- ✅ Docker containerization support
+- ✅ Environment reproducibility (`requirements.txt`)
+- ✅ Comprehensive documentation
+- ✅ One-command setup script (`run.py`)
 
-**Missing Model Files:**
-- Run `model_training.ipynb` notebook first to generate required model files
-- Ensure `best_car_model.keras` and `class_mapping.json` exist
+**Bonus Features**
+- ✅ Two-phase training (base + fine-tuning)
+- ✅ Mixed precision training support
+- ✅ TensorBoard integration  
+- ✅ Health check endpoints
+- ✅ Top-5 predictions
+- ✅ Swagger/OpenAPI documentation
+- ✅ GPU/CPU auto-detection
 
-**Docker Issues:**
-```bash
-docker system prune -a  # Clear Docker cache
-docker build --no-cache -t car-classification-service .  # Force rebuild
-```
+## 📊 Dataset
 
-**GPU Setup (Optional):**
-```bash
-# Check GPU availability
-python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+**Stanford Cars Dataset**
+- 📸 **16,185 images** total
+- 🏷️ **196 classes** (make/model/year)  
+- 🎯 **8,144 training** + **8,041 test** images
+- 📥 Download from [Kaggle](https://www.kaggle.com/datasets/cyizhuo/stanford-cars-by-classes-folder)
 
-# Use CPU-only if needed
-export CUDA_VISIBLE_DEVICES=""
-```
+*Note: Dataset not included due to size/licensing*
 
-## 📝 Checklist Compliance
-
-This project meets all requirements:
-
-- ✅ **model_training.ipynb**: Complete training notebook with Python 3 kernel
-- ✅ **Data Loading**: Stanford Cars dataset with preprocessing
-- ✅ **Model Definition**: ResNet50 with TensorFlow-Keras framework
-- ✅ **Training Loop**: Complete training with metrics visualization
-- ✅ **Model Saving**: Exports to `.keras` and `.h5` format 
-- ✅ **Environment Export**: `pip freeze` cell for reproducibility
-- ✅ **API Service**: FastAPI with `/predict` endpoint
-- ✅ **Docker Support**: Complete containerization
-- ✅ **Documentation**: Comprehensive setup and usage instructions
-- ✅ **GitHub Ready**: Clean repository structure for review
-- ✅ **Automation**: `run.py` script for easy setup and deployment
-
-## 📊 Dataset Information
-
-The Stanford Cars Dataset contains:
-- **16,185 images** of cars
-- **196 classes** (make, model, year combinations)
-- **Training set**: 8,144 images
-- **Test set**: 8,041 images
-
-Download from [Kaggle](https://www.kaggle.com/datasets/cyizhuo/stanford-cars-by-classes-folder) (dataset not included due to licensing).
-
-## 🔒 GitHub Access
+---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file
 
-## 🙏 Acknowledgments
+## 🙏 Credits
 
 - Stanford Cars Dataset creators
-- TensorFlow and Keras teams
+- TensorFlow/Keras teams  
 - FastAPI framework
 - ResNet architecture authors
 
