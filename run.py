@@ -87,7 +87,7 @@ def check_requirements(skip_docker=False):
     return True
 
 def setup_environment():
-    """Set up Python virtual environment"""
+    """Set up and activate Python virtual environment"""
     print(f"{Colors.BOLD}🐍 Setting up Python environment...{Colors.END}")
     
     venv_path = Path('.venv')
@@ -97,13 +97,13 @@ def setup_environment():
     else:
         print(f"{Colors.GREEN}   ✅ Virtual environment already exists{Colors.END}")
     
-    # Determine pip command based on OS
+    # Activate the virtual environment for the current shell session (only works in interactive shells)
+    activate_cmd = ''
     if os.name == 'nt':  # Windows
         pip_cmd = '.venv\\Scripts\\pip'
-    else:  # Linux/macOS
+    else:  # Linux/macOS        
         pip_cmd = '.venv/bin/pip'
     
-    run_command(f'{pip_cmd} install --upgrade pip', 'Upgrading pip')
     run_command(f'{pip_cmd} install -r requirements.txt', 'Installing dependencies')
     
     print(f"{Colors.GREEN}✅ Python environment ready{Colors.END}\n")
@@ -225,7 +225,13 @@ def setup_project(skip_docker=False):
             print(f"{Colors.YELLOW}   You can still use local mode{Colors.END}")
     
     print(f"{Colors.GREEN}✅ Project setup complete!{Colors.END}")
-    print(f"{Colors.YELLOW}💡 Next steps:{Colors.END}")
+    if os.name == 'nt':  # Windows
+        activate_cmd = '.venv\\Scripts\\activate'
+    else:  # Linux/macOS
+        activate_cmd = 'source .venv/bin/activate'
+    print(f"{Colors.YELLOW}💡 To activate the virtual environment, run:{Colors.END} {Colors.BLUE}{activate_cmd}{Colors.END}")
+    
+    print(f"{Colors.YELLOW}💡 Next steps:{Colors.END}")    
     print(f"   1. Run the training notebook: jupyter notebook model_training.ipynb")
     print(f"   2. Start the API: python run.py --mode local")
     print(f"   3. Test the API: curl http://localhost:8000/health\n")
