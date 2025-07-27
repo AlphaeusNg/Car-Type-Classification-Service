@@ -1,61 +1,64 @@
 # Stanford Cars Dataset
 
-This directory contains scripts and utilities for downloading and preparing the Stanford Cars Dataset.
+This directory contains the Stanford Cars Dataset used for training the car type classification model.
 
 ## Dataset Information
 
-- **Name**: Stanford Cars Dataset
+- **Name**: Stanford Cars Dataset (by Classes Folder)
 - **Classes**: 196 (car make, model, year combinations)
 - **Total Images**: 16,185
 - **Training Images**: 8,144
 - **Test Images**: 8,041
-- **Image Size**: ~360x240 pixels (variable)
+- **Source**: Pre-organized by classes for easy use with TensorFlow
 
 ## Download Instructions
 
-### Option 1: Kaggle (Recommended)
+The dataset is automatically downloaded when running the training notebook using KaggleHub:
 
-1. Install Kaggle API:
-   ```bash
-   pip install kaggle
-   ```
+```python
+import kagglehub
+download_path = kagglehub.dataset_download("cyizhuo/stanford-cars-by-classes-folder")
+```
 
-2. Set up Kaggle credentials (create account and download API key from kaggle.com/account)
+### Manual Download (Alternative)
 
-3. Download dataset:
-   ```bash
-   kaggle datasets download -d jessicali9530/stanford-cars-dataset
-   ```
+If you prefer to download manually:
 
-### Option 2: Manual Download
+1. Visit the [Kaggle Dataset Page](https://www.kaggle.com/datasets/cyizhuo/stanford-cars-by-classes-folder)
+2. Download and extract to your preferred location
+3. Update the path in the training notebook
 
-Visit the [Kaggle Dataset Page](https://www.kaggle.com/datasets/jessicali9530/stanford-cars-dataset) and download manually.
+## Expected Data Structure
 
-### Option 3: Original Source
-
-The original dataset can be found at the [Stanford Cars Dataset page](https://ai.stanford.edu/~jkrause/cars/car_dataset.html), though the download links may be broken.
-
-## Data Structure
-
-After downloading and extracting, the expected structure is:
+After the training notebook organizes the dataset, the structure will be:
 
 ```
 data/
-├── cars_train/
-│   ├── 00001.jpg
-│   ├── 00002.jpg
-│   └── ...
-├── cars_test/
-│   ├── 00001.jpg
-│   ├── 00002.jpg
-│   └── ...
-├── cars_train_annos.mat
-├── cars_test_annos.mat
-└── cars_meta.mat
+├── train/
+│   ├── Acura Integra Type R 2001/
+│   │   ├── 000001.jpg
+│   │   ├── 000002.jpg
+│   │   └── ...
+│   ├── Acura RL Sedan 2012/
+│   └── ... (196 classes total)
+└── test/
+    ├── Acura Integra Type R 2001/
+    │   ├── 000001.jpg
+    │   ├── 000002.jpg
+    │   └── ...
+    ├── Acura RL Sedan 2012/
+    └── ... (196 classes total)
 ```
+
+## Usage
+
+1. **Automatic Download**: Simply run the training notebook - the dataset will be downloaded automatically
+2. **Training**: The dataset is already organized by classes, making it ready for `tf.keras.utils.image_dataset_from_directory`
+3. **Class Mapping**: Class names are automatically extracted from folder names
 
 ## Notes
 
-- The notebook in this project uses synthetic data for demonstration
-- For production use, replace the synthetic data generation with actual dataset loading
+- Dataset is automatically downloaded and organized by the training notebook
+- No manual preprocessing required - ready to use with TensorFlow
+- Total dataset size: ~1.8GB
 - Ensure proper licensing compliance when using the dataset
