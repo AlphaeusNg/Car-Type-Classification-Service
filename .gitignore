@@ -38,6 +38,12 @@ models/car_classification_savedmodel/
 *.ckpt
 checkpoints/
 
+# Local training experiment outputs (not part of the API runtime)
+gpu_setup_guide.ipynb
+model_training.ipynb
+training_history.pkl
+training_plots_*.png
+
 # Data files
 data/train/
 data/test/
