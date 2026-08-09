@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 11: 19 model-free tests cover the API boundary,
+- Baseline after Cycle 12: 20 model-free tests cover the API boundary,
   lifecycle, lightweight import, and model artifact discovery/build command;
   GitHub Actions runs them without TensorFlow or trained weights.
 
@@ -15,7 +15,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Run the container as a non-root user | Security | Medium: inference does not need root inside the image | Small / low | Coordinate writable/cache paths if TensorFlow creates them | Next |
+| 1 | Replace `shell=True` runner commands with argument vectors | Security / portability | High: shell strings and unconditional `sudo` make local/Docker workflows brittle | Medium / medium | Preserve interactive uvicorn/Docker behavior with mocked command tests | Next |
+| — | Run the container as a non-root user | Security | Medium: inference does not need root inside the image | Small / low | Writable home plus read-only app/model access | Completed in Cycle 12 |
 | — | Add a focused `.dockerignore` | Performance / security | High: Docker sent virtualenvs, datasets, Git history, and local artifacts as build context | Small / low | Allowlist retains all supported model shapes | Completed in Cycle 11 |
 | — | Add lightweight CI for API contract tests | Test / process | High compounding value: tests were local-only | Medium / low | Lazy TensorFlow import plus minimal dependency file | Completed in Cycle 10 |
 | — | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise failed only during a request | Small / low | Atomic lifespan validation | Completed in Cycle 9 |
@@ -331,3 +332,48 @@ allowlist is safer and easier to audit than accumulating exclusions.
 
 **Next opportunity:** Create and switch to a non-root runtime user in the image,
 then verify the Dockerfile and health/prediction read paths need no root access.
+
+### Cycle 12 — Drop container root privileges (2026-08-09)
+
+**Why this won:** The inference process only reads application source, mapping,
+and model weights, yet the image ran Uvicorn as root. Removing unnecessary
+privilege is a small defense-in-depth improvement with no API behavior change.
+
+**Plan and success criteria**
+
+1. Create a dedicated system user with a writable home for library caches.
+2. Copy runtime artifacts with that ownership and switch users before health
+   checks and the server command.
+3. Contract-test the Dockerfile ordering and keep all API checks green.
+
+**Changes**
+
+- Added system group/user `app`, owned runtime copies, and `HOME=/home/app`.
+- Added `USER app` before `HEALTHCHECK` and `CMD`.
+- Extended Dockerfile tests to enforce the non-root ordering.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 20 passed (up from 19).
+- `docker build --check .`: no warnings.
+- Python compilation and CRLF-aware diff checks passed.
+- A full TensorFlow image build was not required to verify the Dockerfile
+  security contract; runtime ownership paths are explicit.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 8/10 | 8/10 | API/runtime contract is unchanged |
+| Test coverage / verifiability | 7/10 | 9/10 | User and command ordering are regression-tested |
+| Maintainability | 7/10 | 8/10 | Runtime ownership intent is explicit |
+| Performance | 9/10 | 9/10 | No material runtime overhead |
+| Security / safety | 4/10 | 9/10 | Uvicorn no longer runs with root privileges |
+
+**Lesson / process improvement:** Express container privilege boundaries in the
+Dockerfile and test their ordering; comments alone do not prevent a later COPY
+or command from moving execution back across the boundary.
+
+**Next opportunity:** Refactor `run.py` away from `shell=True` command strings
+and unconditional `sudo`, using argument vectors for safer cross-platform local
+and Docker workflows.

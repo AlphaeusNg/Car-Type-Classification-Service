@@ -22,11 +22,15 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Inference needs read-only application/model access, not root privileges.
+RUN groupadd --system app && \
+    useradd --system --gid app --create-home --home-dir /home/app app
+
 # Copy application code and the selected supported model artifact
 ARG MODEL_PATH=best_car_model.keras
-COPY api/ api/
-COPY ${MODEL_PATH} ${MODEL_PATH}
-COPY class_mapping.json .
+COPY --chown=app:app api/ api/
+COPY --chown=app:app ${MODEL_PATH} ${MODEL_PATH}
+COPY --chown=app:app class_mapping.json .
 
 # Expose port 8000
 EXPOSE 8000
@@ -34,6 +38,9 @@ EXPOSE 8000
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV HOME=/home/app
+
+USER app
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
