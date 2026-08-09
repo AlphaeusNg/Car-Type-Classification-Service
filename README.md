@@ -60,6 +60,16 @@ python3 run.py --mode docker   # Docker deployment
 
 That's it! API runs at **http://localhost:8000** 🎉
 
+### Run tests
+
+```bash
+python3 -m pytest -q
+```
+
+The tests use a lightweight fake predictor, so trained model files are not
+required to verify health, upload validation, error handling, and response
+ranking.
+
 ## 🔌 API Usage
 
 ### Test the Service
@@ -72,6 +82,9 @@ curl -X POST "http://localhost:8000/predict" \
      -H "Content-Type: multipart/form-data" \
      -F "image=@data/test/Acura TL Sedan 2012/000197.jpg"
 ```
+
+`/health` is a readiness check: it returns HTTP 503 until both the model and
+class mapping are loaded, then HTTP 200 with `"status": "healthy"`.
 
 ### Response Format
 ```json

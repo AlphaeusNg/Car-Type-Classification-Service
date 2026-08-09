@@ -36,6 +36,8 @@ app = FastAPI(
 # Global model and class mapping
 model = None
 class_mapping = None
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 @app.on_event("startup")
 async def startup_event():
@@ -49,7 +51,7 @@ async def startup_event():
         logger.info("✅ Model and class mapping loaded successfully!")
     except Exception as e:
         logger.error(f"❌ Failed to load model: {str(e)}")
-        raise e
+        raise
 
 
 @app.get("/")
@@ -59,13 +61,17 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
+    """Readiness check for the model and class mapping."""
+    ready = model is not None and class_mapping is not None
+    payload = {
+        "status": "healthy" if ready else "unavailable",
         "model_loaded": model is not None,
         "class_mapping_loaded": class_mapping is not None,
         "total_classes": len(class_mapping.get("index_to_class", {})) if class_mapping else 0
     }
+    if not ready:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 @app.post("/predict")
 async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
@@ -78,18 +84,25 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
     Returns:
         JSON with predicted class, confidence, and top-5 predictions
     """
+    if model is None or class_mapping is None:
+        raise HTTPException(status_code=503, detail="Model is not ready")
+
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="File must be a JPEG or PNG image")
+
+    image_data = await image.read(MAX_UPLOAD_BYTES + 1)
+    if not image_data:
+        raise HTTPException(status_code=400, detail="Image file is empty")
+    if len(image_data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds the 10 MB upload limit")
+
     try:
-        # Validate file type
-        if not image.content_type.startswith('image/'):
-            raise HTTPException(
-                status_code=400,
-                detail="❌ File must be an image (JPEG/PNG)"
-            )
-        
-        # Read and preprocess image
-        image_data = await image.read()
         processed_image = preprocess_image(image_data)
-        
+    except ValueError as exc:
+        logger.warning("Rejected invalid image upload: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid image data") from exc
+
+    try:
         # Make prediction
         predictions = model.predict(processed_image, verbose=0)
         
@@ -115,14 +128,9 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
             "status": "success"
         }
         
-    except HTTPException:
-        raise  # Re-raise HTTP exceptions
     except Exception as e:
-        logger.error(f"❌ Prediction error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Prediction failed: {str(e)}"
-        )
+        logger.exception("Prediction failed")
+        raise HTTPException(status_code=500, detail="Prediction failed") from e
 
 
 @app.exception_handler(Exception)

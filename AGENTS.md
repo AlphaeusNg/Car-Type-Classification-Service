@@ -45,6 +45,7 @@ python3 run.py            # project’s one-command helper (see README)
 # or uvicorn via API module as documented in README
 
 python3 prediction_example.py
+python3 -m pytest -q
 docker build -t car-type-clf .
 ```
 
