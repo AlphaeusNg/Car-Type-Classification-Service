@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     import tensorflow as tf
 
 MAX_DECODED_PIXELS = 50_000_000
+PREPROCESSED_IMAGE_SHAPE = (1, 224, 224, 3)
 
 
 def validate_image_dimensions(size, max_pixels=MAX_DECODED_PIXELS):
@@ -88,7 +89,7 @@ def preprocess_image(image_data: bytes) -> np.ndarray:
             image = image.convert('RGB')
         
         # Resize to model input size
-        image = image.resize((224, 224))
+        image = image.resize(PREPROCESSED_IMAGE_SHAPE[1:3])
         
         # Convert to numpy array
         image_array = np.array(image)

@@ -7,16 +7,17 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 19: 58 model-free tests cover the API boundary,
-  lifecycle, prediction decoding, lightweight import, and model artifact
-  discovery/build command; GitHub Actions runs them without TensorFlow or
-  trained weights.
+- Baseline after Cycle 20: 67 model-free tests cover the API boundary,
+  lifecycle, model input/output compatibility, prediction decoding,
+  lightweight import, and model artifact discovery/build command; GitHub
+  Actions runs them without TensorFlow or trained weights.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Validate model input shape against preprocessing | Correctness / reliability | High: an incompatible artifact can pass readiness then fail every request | Small / low | Preprocessing always emits `(None, 224, 224, 3)`; startup already validates output shape | Next |
+| 1 | Apply JPEG EXIF orientation before resize | Correctness / UX | Medium-high: phone photos can be classified sideways despite valid pixels | Small / low | `ImageOps.exif_transpose` before RGB conversion | Next |
+| — | Validate model input shape against preprocessing | Correctness / reliability | High: an incompatible artifact passed readiness then failed every request | Small / low | Shared `(1, 224, 224, 3)` contract | Completed in Cycle 20 |
 | — | Validate prediction tensor shape and finite scores | Correctness / robustness | High: malformed model output produced misleading rankings or generic indexing failures | Small / low | Pure decoder plus fake outputs | Completed in Cycle 19 |
 | — | Bound decoded image dimensions before resize | Security / resources | High: compressed images bypassed the byte-size limit after decoding | Small / low | 50-megapixel ceiling | Completed in Cycle 18 |
 | — | Distinguish corrupt model artifacts from missing artifacts | Correctness / observability | High: loader falsely returned `FileNotFoundError` after deserialization failures | Small / low | Injected loader covers preference and fallback | Completed in Cycle 17 |
@@ -720,5 +721,63 @@ client input. Extract decoding before testing it so malformed tensor contracts
 stay cheap, deterministic, and independent of trained weights.
 
 **Next opportunity:** Validate the loaded model's input shape against the
-preprocessor's fixed `(None, 224, 224, 3)` contract during lifespan, so an
+preprocessor's fixed `(1, 224, 224, 3)` contract during lifespan, so an
 incompatible artifact never reports ready and fails every request.
+
+### Cycle 20 — Validate model input compatibility at startup (2026-08-10)
+
+**Why this won:** Lifespan validated only output width and label compatibility.
+A model expecting a second input, a different tensor rank/resolution/channel
+count, or a fixed batch larger than one could still report healthy and then
+fail every request when given the preprocessor's `(1, 224, 224, 3)` array.
+
+**Plan and success criteria**
+
+1. Define one shared preprocessed image shape and use it during resize.
+2. Accept single-input model shapes whose fixed dimensions can consume that
+   array, including dynamic dimensions and batch size one.
+3. Reject missing, multi-input, wrong-rank, and incompatible fixed dimensions
+   before readiness globals are published.
+4. Test the preprocessor's actual output shape and every startup branch without
+   TensorFlow or model weights.
+
+**Changes**
+
+- Added `PREPROCESSED_IMAGE_SHAPE = (1, 224, 224, 3)` and made image resizing
+  derive its dimensions from that contract.
+- Extended `validate_runtime_artifacts` to require one rank-four input and to
+  compare every fixed dimension against the preprocessed array while allowing
+  `None` as a compatible dynamic dimension.
+- Added five incompatible-shape, three compatible-shape, and one real
+  preprocessing-output test.
+- Updated readiness documentation to cover both input/output compatibility.
+
+**Verification evidence**
+
+- Test-first evidence: all five incompatible input fixtures initially reached
+  readiness validation without raising.
+- `.venv/bin/python -m pytest -q`: 67 passed in 1.10s (up from 58).
+- Rejected shapes cover absent metadata, multi-input models, rank three,
+  299×299 images, and fixed batch 32; accepted shapes cover dynamic batch,
+  batch one, and dynamic spatial dimensions with three channels.
+- A real in-memory PNG preprocesses to the shared `(1, 224, 224, 3)` shape.
+- `.venv/bin/python -m compileall -q api tests run.py`, lightweight import
+  contracts, and CRLF-aware `git diff --check`: passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 5/10 | 9/10 | Incompatible inputs abort lifespan before readiness |
+| Test coverage / verifiability | 5/10 | 10/10 | Shape compatibility and actual preprocessing output share a tested constant |
+| Maintainability | 6/10 | 9/10 | Resize and startup validation cannot silently drift apart |
+| Performance / resources | 9/10 | 9/10 | Four constant-time dimension checks run once at startup |
+| Security / robustness | 7/10 | 9/10 | Multi-input and malformed shape metadata fail closed |
+
+**Lesson / process improvement:** Validate both sides of an inference boundary:
+the preprocessor's actual tensor and the model's declared input. A shared
+constant prevents configuration drift more reliably than duplicated literals.
+
+**Next opportunity:** Apply JPEG EXIF orientation before RGB conversion and
+resize, with an in-memory rotated-photo fixture proving mobile uploads reach
+the model upright.

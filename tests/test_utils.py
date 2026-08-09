@@ -1,13 +1,17 @@
 import json
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from api.utils import (
+    PREPROCESSED_IMAGE_SHAPE,
     decode_predictions,
     load_class_mapping,
     load_model,
+    preprocess_image,
     validate_image_dimensions,
 )
 
@@ -64,6 +68,13 @@ def test_decode_predictions_requires_positive_integer_top_k(top_k):
 
 def test_image_dimensions_accept_decode_limit_boundary():
     validate_image_dimensions((10_000, 5_000))
+
+
+def test_preprocess_image_matches_shared_model_input_shape():
+    encoded = BytesIO()
+    Image.new("RGB", (32, 16), "red").save(encoded, format="PNG")
+
+    assert preprocess_image(encoded.getvalue()).shape == PREPROCESSED_IMAGE_SHAPE
 
 
 @pytest.mark.parametrize("size", [(0, 100), (-1, 100), (10_001, 5_000)])

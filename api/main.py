@@ -16,6 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from api.utils import (
+        PREPROCESSED_IMAGE_SHAPE,
         decode_predictions,
         load_class_mapping,
         load_model,
@@ -24,6 +25,7 @@ try:
 except ImportError:
     # Fallback for when running from api directory
     from utils import (
+        PREPROCESSED_IMAGE_SHAPE,
         decode_predictions,
         load_class_mapping,
         load_model,
@@ -52,6 +54,26 @@ def validate_runtime_artifacts(loaded_model, loaded_mapping):
         raise ValueError("index_to_class must be a non-empty object")
     if not isinstance(class_to_index, dict):
         raise ValueError("class_to_index must be an object")
+
+    input_shape = getattr(loaded_model, "input_shape", None)
+    if not isinstance(input_shape, (tuple, list)) or not input_shape:
+        raise ValueError("model must expose a single input shape")
+    if isinstance(input_shape[0], (tuple, list)):
+        raise ValueError("multi-input models are not supported")
+    if len(input_shape) != len(PREPROCESSED_IMAGE_SHAPE):
+        raise ValueError("model input shape must have rank 4")
+    for actual, expected in zip(input_shape, PREPROCESSED_IMAGE_SHAPE):
+        if actual is None:
+            continue
+        try:
+            actual = int(actual)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("model input dimensions must be known or dynamic") from exc
+        if actual != expected:
+            raise ValueError(
+                f"model input shape {input_shape} does not accept "
+                f"preprocessed shape {PREPROCESSED_IMAGE_SHAPE}"
+            )
 
     output_shape = getattr(loaded_model, "output_shape", None)
     if not isinstance(output_shape, (tuple, list)) or not output_shape:

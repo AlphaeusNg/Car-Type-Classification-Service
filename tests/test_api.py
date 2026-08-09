@@ -9,6 +9,7 @@ class FakeModel:
     def __init__(self, predictions=None, error=None):
         self.predictions = predictions
         self.error = error
+        self.input_shape = (None, 224, 224, 3)
         self.output_shape = (None, len(predictions)) if predictions is not None else (None, 5)
 
     def predict(self, _image, verbose=0):
@@ -102,6 +103,35 @@ def test_lifespan_loads_dependencies_before_serving(monkeypatch):
 def test_runtime_artifacts_reject_model_mapping_width_mismatch():
     with pytest.raises(ValueError, match="output width does not match"):
         api.validate_runtime_artifacts(FakeModel([0.2, 0.3, 0.5]), mapping(5))
+
+
+@pytest.mark.parametrize(
+    ("input_shape", "message"),
+    [
+        (None, "single input shape"),
+        ([(None, 224, 224, 3), (None, 1)], "multi-input"),
+        ((None, 224, 224), "rank 4"),
+        ((None, 299, 299, 3), "does not accept"),
+        ((32, 224, 224, 3), "does not accept"),
+    ],
+)
+def test_runtime_artifacts_reject_incompatible_model_input(input_shape, message):
+    loaded_model = FakeModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    loaded_model.input_shape = input_shape
+
+    with pytest.raises(ValueError, match=message):
+        api.validate_runtime_artifacts(loaded_model, mapping())
+
+
+@pytest.mark.parametrize(
+    "input_shape",
+    [(None, 224, 224, 3), (1, 224, 224, 3), (None, None, None, 3)],
+)
+def test_runtime_artifacts_accept_compatible_model_input(input_shape):
+    loaded_model = FakeModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    loaded_model.input_shape = input_shape
+
+    api.validate_runtime_artifacts(loaded_model, mapping())
 
 
 def test_runtime_artifacts_reject_non_inverse_mapping():
