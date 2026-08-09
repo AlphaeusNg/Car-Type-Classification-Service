@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 import run
 
@@ -38,8 +39,15 @@ def test_docker_build_uses_discovered_model_path(tmp_path, monkeypatch):
 
     assert run.build_docker()
     assert commands == [
-        "sudo docker build --build-arg MODEL_PATH=best_car_model.keras "
-        "-t car-classification-service:latest ."
+        [
+            "docker",
+            "build",
+            "--build-arg",
+            "MODEL_PATH=best_car_model.keras",
+            "-t",
+            "car-classification-service:latest",
+            ".",
+        ]
     ]
 
 
@@ -53,3 +61,26 @@ def test_docker_build_fails_before_docker_when_model_is_missing(tmp_path, monkey
     )
 
     assert not run.build_docker()
+
+
+def test_run_command_passes_arguments_without_a_shell(monkeypatch):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(run.subprocess, "run", fake_run)
+
+    assert run.run_command(["tool", "argument with spaces"], "Testing")
+    assert calls[0][0] == ["tool", "argument with spaces"]
+    assert "shell" not in calls[0][1]
+
+
+def test_run_command_rejects_shell_strings():
+    try:
+        run.run_command("tool --flag", "Testing")
+    except TypeError as error:
+        assert "argument sequence" in str(error)
+    else:
+        raise AssertionError("shell string should be rejected")

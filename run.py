@@ -8,6 +8,8 @@ import os
 import sys
 import subprocess
 import argparse
+import shlex
+import shutil
 from pathlib import Path
 
 # Configuration
@@ -46,17 +48,18 @@ def print_banner():
     print(f"{Colors.BLUE}={'=' * 50}{Colors.END}\n")
 
 def run_command(command, description, check=True):
-    """Run a shell command with proper error handling"""
+    """Run an argument-vector command with captured output and no shell."""
+    if isinstance(command, str):
+        raise TypeError("command must be an argument sequence, not a shell string")
     print(f"{Colors.YELLOW}📋 {description}...{Colors.END}")
-    print(f"{Colors.BLUE}   Command: {command}{Colors.END}")
+    print(f"{Colors.BLUE}   Command: {shlex.join(map(str, command))}{Colors.END}")
     
     try:
         result = subprocess.run(
-            command, 
-            shell=True, 
-            check=check, 
-            capture_output=True, 
-            text=True
+            [str(part) for part in command],
+            check=check,
+            capture_output=True,
+            text=True,
         )
         
         if result.stdout:
@@ -69,18 +72,23 @@ def run_command(command, description, check=True):
         if check:
             sys.exit(1)
         return False
+    except OSError as e:
+        print(f"{Colors.RED}   ❌ Error: {e}{Colors.END}")
+        if check:
+            sys.exit(1)
+        return False
 
 def check_requirements(skip_docker=False):
     """Check if required tools are installed"""
     print(f"{Colors.BOLD}🔍 Checking requirements...{Colors.END}")
     
     requirements = {
-        'python3': 'python3 --version',
-        'pip': 'pip --version'
+        'python3': [sys.executable, '--version'],
+        'pip': [sys.executable, '-m', 'pip', '--version'],
     }
     
     if not skip_docker:
-        requirements['docker'] = 'docker --version'
+        requirements['docker'] = ['docker', '--version']
     
     missing = []
     for tool, command in requirements.items():
@@ -108,18 +116,19 @@ def setup_environment():
     venv_path = Path('.venv')
     
     if not venv_path.exists():
-        run_command('python3 -m venv .venv', 'Creating virtual environment')
+        run_command([sys.executable, '-m', 'venv', '.venv'], 'Creating virtual environment')
     else:
         print(f"{Colors.GREEN}   ✅ Virtual environment already exists{Colors.END}")
     
-    # Activate the virtual environment for the current shell session (only works in interactive shells)
-    activate_cmd = ''
     if os.name == 'nt':  # Windows
-        pip_cmd = '.venv\\Scripts\\pip'
-    else:  # Linux/macOS        
-        pip_cmd = '.venv/bin/pip'
+        venv_python = Path('.venv/Scripts/python.exe')
+    else:  # Linux/macOS
+        venv_python = Path('.venv/bin/python')
     
-    run_command(f'{pip_cmd} install -r requirements.txt', 'Installing dependencies')
+    run_command(
+        [venv_python, '-m', 'pip', 'install', '-r', 'requirements.txt'],
+        'Installing dependencies',
+    )
     
     print(f"{Colors.GREEN}✅ Python environment ready{Colors.END}\n")
 
@@ -141,10 +150,15 @@ def build_docker():
 
     # Build Docker image
     model_arg = model_path.as_posix()
-    build_cmd = (
-        f"sudo docker build --build-arg MODEL_PATH={model_arg} "
-        f"-t {DOCKER_IMAGE} ."
-    )
+    build_cmd = [
+        'docker',
+        'build',
+        '--build-arg',
+        f'MODEL_PATH={model_arg}',
+        '-t',
+        DOCKER_IMAGE,
+        '.',
+    ]
     success = run_command(build_cmd, 'Building Docker image')
     
     if success:
@@ -174,15 +188,25 @@ def run_local_api(port=DEFAULT_PORT, reload=True):
     else:  # Linux/macOS
         python_cmd = '.venv/bin/python'
     
-    reload_flag = '--reload' if reload else ''
-    uvicorn_cmd = f'{python_cmd} -m uvicorn {API_MODULE} --host 0.0.0.0 --port {port} {reload_flag}'
+    uvicorn_cmd = [
+        python_cmd,
+        '-m',
+        'uvicorn',
+        API_MODULE,
+        '--host',
+        '0.0.0.0',
+        '--port',
+        str(port),
+    ]
+    if reload:
+        uvicorn_cmd.append('--reload')
     
     print(f"{Colors.GREEN}🌐 API will be available at: http://localhost:{port}{Colors.END}")
     print(f"{Colors.GREEN}📚 API docs available at: http://localhost:{port}/docs{Colors.END}")
     print(f"{Colors.YELLOW}Press Ctrl+C to stop the server{Colors.END}\n")
     
     try:
-        subprocess.run(uvicorn_cmd, shell=True, check=True)
+        subprocess.run(uvicorn_cmd, check=True)
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}🛑 Server stopped by user{Colors.END}")
     except subprocess.CalledProcessError as e:
@@ -196,8 +220,8 @@ def run_docker_api(port=DEFAULT_PORT):
     print(f"{Colors.BOLD}🐳 Starting Docker container...{Colors.END}")
     
     # Check if Docker image exists
-    check_cmd = f'sudo docker images -q {DOCKER_IMAGE}'
-    result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
+    check_cmd = ['docker', 'images', '-q', DOCKER_IMAGE]
+    result = subprocess.run(check_cmd, capture_output=True, text=True, check=False)
     
     if not result.stdout.strip():
         print(f"{Colors.YELLOW}⚠️  Docker image not found. Building first...{Colors.END}")
@@ -205,24 +229,32 @@ def run_docker_api(port=DEFAULT_PORT):
             return False
     
     # Stop any existing container
-    stop_cmd = f'sudo docker stop {PROJECT_NAME} 2>/dev/null || true'
-    remove_cmd = f'sudo docker rm {PROJECT_NAME} 2>/dev/null || true'
-    subprocess.run(stop_cmd, shell=True, capture_output=True)
-    subprocess.run(remove_cmd, shell=True, capture_output=True)
+    stop_cmd = ['docker', 'stop', PROJECT_NAME]
+    remove_cmd = ['docker', 'rm', PROJECT_NAME]
+    subprocess.run(stop_cmd, capture_output=True, check=False)
+    subprocess.run(remove_cmd, capture_output=True, check=False)
     
     # Run new container
-    docker_cmd = f'sudo docker run --name {PROJECT_NAME} -p {port}:{DEFAULT_PORT} {DOCKER_IMAGE}'
+    docker_cmd = [
+        'docker',
+        'run',
+        '--name',
+        PROJECT_NAME,
+        '-p',
+        f'{port}:{DEFAULT_PORT}',
+        DOCKER_IMAGE,
+    ]
     
     print(f"{Colors.GREEN}🌐 API will be available at: http://localhost:{port}{Colors.END}")
     print(f"{Colors.GREEN}📚 API docs available at: http://localhost:{port}/docs{Colors.END}")
     print(f"{Colors.YELLOW}Press Ctrl+C to stop the container{Colors.END}\n")
     
     try:
-        subprocess.run(docker_cmd, shell=True, check=True)
+        subprocess.run(docker_cmd, check=True)
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}🛑 Stopping container...{Colors.END}")
-        subprocess.run(f'sudo docker stop {PROJECT_NAME}', shell=True, capture_output=True)
-        subprocess.run(f'sudo docker rm {PROJECT_NAME}', shell=True, capture_output=True)
+        subprocess.run(stop_cmd, capture_output=True, check=False)
+        subprocess.run(remove_cmd, capture_output=True, check=False)
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}❌ Failed to run Docker container: {e}{Colors.END}")
         return False
@@ -268,7 +300,7 @@ def auto_setup_and_run():
     print(f"  5. Start the API server\n")
     
     # Check if Docker is available
-    docker_available = subprocess.run('docker --version', shell=True, capture_output=True).returncode == 0
+    docker_available = shutil.which('docker') is not None
     
     # Setup environment
     check_requirements(skip_docker=not docker_available)

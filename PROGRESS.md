@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 12: 20 model-free tests cover the API boundary,
+- Baseline after Cycle 13: 22 model-free tests cover the API boundary,
   lifecycle, lightweight import, and model artifact discovery/build command;
   GitHub Actions runs them without TensorFlow or trained weights.
 
@@ -15,7 +15,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Replace `shell=True` runner commands with argument vectors | Security / portability | High: shell strings and unconditional `sudo` make local/Docker workflows brittle | Medium / medium | Preserve interactive uvicorn/Docker behavior with mocked command tests | Next |
+| 1 | Validate CLI ports before launching Uvicorn/Docker | Correctness / UX | Medium: argparse currently accepts negative and out-of-range ports | Small / low | Add a typed argparse validator and boundary tests | Next |
+| — | Replace `shell=True` runner commands with argument vectors | Security / portability | High: shell strings and unconditional `sudo` made workflows brittle | Medium / medium | Interactive processes retain inherited terminal | Completed in Cycle 13 |
 | — | Run the container as a non-root user | Security | Medium: inference does not need root inside the image | Small / low | Writable home plus read-only app/model access | Completed in Cycle 12 |
 | — | Add a focused `.dockerignore` | Performance / security | High: Docker sent virtualenvs, datasets, Git history, and local artifacts as build context | Small / low | Allowlist retains all supported model shapes | Completed in Cycle 11 |
 | — | Add lightweight CI for API contract tests | Test / process | High compounding value: tests were local-only | Medium / low | Lazy TensorFlow import plus minimal dependency file | Completed in Cycle 10 |
@@ -377,3 +378,52 @@ or command from moving execution back across the boundary.
 **Next opportunity:** Refactor `run.py` away from `shell=True` command strings
 and unconditional `sudo`, using argument vectors for safer cross-platform local
 and Docker workflows.
+
+### Cycle 13 — Remove shell command execution (2026-08-09)
+
+**Why this won:** `run.py` constructed every setup, Uvicorn, and Docker command
+as a shell string, often prefixed with platform-specific `sudo`. Even currently
+typed values passed through unnecessary shell interpretation, and Windows/local
+Docker workflows inherited Unix assumptions.
+
+**Plan and success criteria**
+
+1. Require argument sequences in the shared runner and never invoke a shell.
+2. Convert setup, requirement, Uvicorn, and Docker operations while preserving
+   live output and Ctrl+C for long-running processes.
+3. Remove unconditional `sudo` and prove spaced arguments stay single values.
+
+**Changes**
+
+- Changed `run_command` to reject strings, render arguments safely for display,
+  and call `subprocess.run` with a list and no shell.
+- Converted every command site, including cleanup operations and reload flags,
+  to explicit argument vectors.
+- Replaced the shell-based Docker availability probe with `shutil.which` and
+  invoked Docker directly for cross-platform compatibility.
+- Added tests for exact Docker arguments, spaced-argument preservation, and
+  shell-string rejection.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 22 passed (up from 20).
+- `rg 'shell=True|sudo docker' run.py`: no matches; remaining subprocess calls
+  all receive constructed lists.
+- Python compilation and CRLF-aware diff checks passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 6/10 | 9/10 | Arguments no longer depend on shell parsing or empty flag strings |
+| Test coverage / verifiability | 6/10 | 9/10 | Command shape and string rejection have direct tests |
+| Maintainability | 5/10 | 9/10 | Commands are structured data rather than interpolated scripts |
+| Developer experience | 4/10 | 8/10 | Docker no longer assumes Unix `sudo`; server output stays interactive |
+| Security / safety | 3/10 | 9/10 | Shell interpretation is removed from all launch paths |
+
+**Lesson / process improvement:** Treat subprocess commands as argument data by
+default. Keep captured helper commands separate from foreground processes, but
+use the same no-shell invariant for both.
+
+**Next opportunity:** Add an argparse port validator covering 1–65535 so invalid
+ports fail immediately with a clear CLI error before setup or launch work.
