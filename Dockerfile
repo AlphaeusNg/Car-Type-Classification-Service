@@ -22,9 +22,10 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code and the selected supported model artifact
+ARG MODEL_PATH=best_car_model.keras
 COPY api/ api/
-COPY car_classification_model.h5 .
+COPY ${MODEL_PATH} ${MODEL_PATH}
 COPY class_mapping.json .
 
 # Expose port 8000

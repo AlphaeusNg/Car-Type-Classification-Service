@@ -15,6 +15,21 @@ PROJECT_NAME = "car-classification-service"
 DOCKER_IMAGE = f"{PROJECT_NAME}:latest"
 DEFAULT_PORT = 8000
 API_MODULE = "api.main:app"
+MODEL_CANDIDATES = (
+    Path("best_car_model.keras"),
+    Path("car_classification_model.h5"),
+    Path("models/car_classification_savedmodel"),
+)
+CLASS_MAPPING_PATH = Path("class_mapping.json")
+
+
+def find_model_artifact(root=Path(".")):
+    """Return the first model artifact supported by api.utils.load_model."""
+    for relative_path in MODEL_CANDIDATES:
+        candidate = root / relative_path
+        if candidate.exists():
+            return candidate
+    return None
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -111,22 +126,25 @@ def setup_environment():
 def build_docker():
     """Build Docker image"""
     print(f"{Colors.BOLD}🐳 Building Docker image...{Colors.END}")
-    
-    # Check if model files exist
-    model_files = ['car_classification_model.h5', 'class_mapping.json']
-    missing_files = [f for f in model_files if not Path(f).exists()]
-    
+
+    model_path = find_model_artifact()
+    missing_files = []
+    if model_path is None:
+        missing_files.append("a supported model artifact")
+    if not CLASS_MAPPING_PATH.exists():
+        missing_files.append(str(CLASS_MAPPING_PATH))
+
     if missing_files:
-        print(f"{Colors.YELLOW}⚠️  Warning: Missing model files: {', '.join(missing_files)}{Colors.END}")
-        print(f"{Colors.YELLOW}   Please run the training notebook first to generate model files{Colors.END}")
-        
-        response = input(f"{Colors.YELLOW}   Continue building Docker image? (y/N): {Colors.END}")
-        if response.lower() != 'y':
-            print(f"{Colors.YELLOW}   Skipping Docker build{Colors.END}\n")
-            return False
-    
+        print(f"{Colors.RED}❌ Missing runtime artifacts: {', '.join(missing_files)}{Colors.END}")
+        print(f"{Colors.YELLOW}   Please run the training notebook first{Colors.END}\n")
+        return False
+
     # Build Docker image
-    build_cmd = f'sudo docker build -t {DOCKER_IMAGE} .'
+    model_arg = model_path.as_posix()
+    build_cmd = (
+        f"sudo docker build --build-arg MODEL_PATH={model_arg} "
+        f"-t {DOCKER_IMAGE} ."
+    )
     success = run_command(build_cmd, 'Building Docker image')
     
     if success:
@@ -138,10 +156,13 @@ def run_local_api(port=DEFAULT_PORT, reload=True):
     """Run API locally with uvicorn"""
     print(f"{Colors.BOLD}🚀 Starting local API server...{Colors.END}")
     
-    # Check if model files exist
-    model_files = ['car_classification_model.h5', 'class_mapping.json']
-    missing_files = [f for f in model_files if not Path(f).exists()]
-    
+    model_path = find_model_artifact()
+    missing_files = []
+    if model_path is None:
+        missing_files.append("a supported model artifact")
+    if not CLASS_MAPPING_PATH.exists():
+        missing_files.append(str(CLASS_MAPPING_PATH))
+
     if missing_files:
         print(f"{Colors.RED}❌ Missing required model files: {', '.join(missing_files)}{Colors.END}")
         print(f"{Colors.YELLOW}💡 Please run the training notebook first to generate model files{Colors.END}")
@@ -253,9 +274,12 @@ def auto_setup_and_run():
     check_requirements(skip_docker=not docker_available)
     setup_environment()
     
-    # Check for model files
-    model_files = ['car_classification_model.h5', 'class_mapping.json']
-    missing_files = [f for f in model_files if not Path(f).exists()]
+    model_path = find_model_artifact()
+    missing_files = []
+    if model_path is None:
+        missing_files.append("a supported model artifact")
+    if not CLASS_MAPPING_PATH.exists():
+        missing_files.append(str(CLASS_MAPPING_PATH))
     
     if missing_files:
         print(f"{Colors.YELLOW}⚠️  Missing model files: {', '.join(missing_files)}{Colors.END}")
@@ -268,7 +292,7 @@ def auto_setup_and_run():
             return False
     
     # Choose deployment method
-    if docker_available and Path('car_classification_model.h5').exists():
+    if docker_available and model_path is not None:
         print(f"{Colors.BOLD}🎯 Choosing deployment method...{Colors.END}")
         response = input(f"{Colors.YELLOW}Run in Docker (d) or Local (l)? [l]: {Colors.END}")
         

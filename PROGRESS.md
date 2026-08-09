@@ -7,17 +7,17 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 6: 8 model-free API tests cover readiness, upload
-  validation, safe errors, and successful ranking.
+- Baseline after Cycle 7: 13 model-free tests cover the API boundary and model
+  artifact discovery/build command contract.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Unify model artifact discovery in `run.py`, Docker, and the loader | Bug / deploy reliability | Critical: documented `.keras` models are accepted by the loader but rejected or omitted by launch/build paths | Medium / medium | Docker currently requires one absent `.h5` filename | Next |
-| 2 | Replace deprecated FastAPI startup events with lifespan | Reliability / maintainability | Medium: current tests emit framework deprecation warnings | Small / low | FastAPI 0.116 lifespan API | Backlog |
-| 3 | Add lightweight CI for API contract tests | Test / process | High compounding value: new tests are local-only | Medium / low | TensorFlow import makes a minimal CI environment non-trivial | Backlog |
-| 4 | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise fail only during a request | Small / low | Requires model output-shape contract | Backlog |
+| 1 | Replace deprecated FastAPI startup events with lifespan | Reliability / maintainability | Medium: current tests emit framework deprecation warnings | Small / low | FastAPI 0.116 lifespan API | Next |
+| 2 | Add lightweight CI for API contract tests | Test / process | High compounding value: new tests are local-only | Medium / low | TensorFlow import makes a minimal CI environment non-trivial | Backlog |
+| 3 | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise fail only during a request | Small / low | Requires model output-shape contract | Backlog |
+| — | Unify model artifact discovery in `run.py`, Docker, and the loader | Bug / deploy reliability | Critical: supported `.keras` models were rejected or omitted by launch/build paths | Medium / medium | Shared candidate order plus Docker build argument | Completed in Cycle 7 |
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
@@ -81,3 +81,56 @@ interpreter because copied/moved virtualenv launcher shebangs can be stale.
 **Next opportunity:** Repair the model-artifact mismatch across `run.py`, the
 Dockerfile, and `load_model` so every documented supported model format can
 actually launch and package consistently.
+
+### Cycle 7 — Unify model artifact discovery (2026-08-09)
+
+**Why this won:** `api.utils.load_model` preferred `best_car_model.keras` and
+also supported legacy H5/SavedModel paths, but `run.py` rejected everything
+except `car_classification_model.h5` and the Dockerfile always copied that exact
+file. The documented preferred artifact therefore could not launch through the
+standard deployment path.
+
+**Plan and success criteria**
+
+1. Use the loader's artifact preference in local, automatic, and Docker launch
+   checks.
+2. Pass the selected relative artifact path into Docker rather than hard-code a
+   filename.
+3. Test preference, all supported shapes, the generated build command, and
+   fail-fast behavior without invoking Docker.
+
+**Changes**
+
+- Added shared model candidate constants and `find_model_artifact` to `run.py`.
+- Updated local launch, automatic selection, and Docker build checks to use the
+  discovered model plus `class_mapping.json`.
+- Added Docker `MODEL_PATH` build argument support.
+- Added five runner tests and documented manual artifact selection.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 13 passed (up from 8).
+- `.venv/bin/python -m compileall -q api tests run.py`: passed.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+- Tests verify `.keras` preference, H5 fallback, SavedModel directory support,
+  Docker build-argument propagation, and no Docker call when weights are absent.
+- A real Docker image build was not possible because trained weights are
+  intentionally absent from this checkout; this is an external artifact
+  boundary, not a passing claim.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 3/10 | 9/10 | All loader-supported artifact paths reach standard launch checks |
+| Test coverage / verifiability | 4/10 | 8/10 | Five model-free deployment-path tests cover selection and command creation |
+| Maintainability | 4/10 | 8/10 | One ordered candidate list replaces three filename checks |
+| Developer experience | 3/10 | 8/10 | Preferred `.keras` output now works with documented commands |
+| Security / safety | 8/10 | 8/10 | Fixed candidate paths are passed; no new untrusted shell input |
+
+**Lesson / process improvement:** Artifact discovery belongs in one function
+shared by every launcher. Test command construction with a captured runner so
+deployment logic stays verifiable when large external artifacts are absent.
+
+**Next opportunity:** Migrate startup loading to FastAPI lifespan, eliminate the
+two deprecation warnings, and preserve readiness behavior with lifecycle tests.

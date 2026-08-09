@@ -70,6 +70,15 @@ The tests use a lightweight fake predictor, so trained model files are not
 required to verify health, upload validation, error handling, and response
 ranking.
 
+`run.py` and the Docker build accept the same model formats as the API loader:
+`best_car_model.keras`, `car_classification_model.h5`, or
+`models/car_classification_savedmodel`. For a manual Docker build, select the
+artifact explicitly when it is not the default:
+
+```bash
+docker build --build-arg MODEL_PATH=car_classification_model.h5 -t car-type-clf .
+```
+
 ## 🔌 API Usage
 
 ### Test the Service
