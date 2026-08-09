@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 20: 67 model-free tests cover the API boundary,
+- Baseline after Cycle 21: 68 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   lightweight import, and model artifact discovery/build command; GitHub
   Actions runs them without TensorFlow or trained weights.
@@ -16,7 +16,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Apply JPEG EXIF orientation before resize | Correctness / UX | Medium-high: phone photos can be classified sideways despite valid pixels | Small / low | `ImageOps.exif_transpose` before RGB conversion | Next |
+| 1 | Verify decoded image format instead of trusting MIME alone | Correctness / security | Medium: renamed unsupported formats currently pass the JPEG/PNG header check | Small / low | Inspect Pillow `image.format` after open | Next |
+| — | Apply JPEG EXIF orientation before resize | Correctness / UX | Medium-high: phone photos were classified sideways despite valid pixels | Small / low | Asymmetric orientation-6 JPEG | Completed in Cycle 21 |
 | — | Validate model input shape against preprocessing | Correctness / reliability | High: an incompatible artifact passed readiness then failed every request | Small / low | Shared `(1, 224, 224, 3)` contract | Completed in Cycle 20 |
 | — | Validate prediction tensor shape and finite scores | Correctness / robustness | High: malformed model output produced misleading rankings or generic indexing failures | Small / low | Pure decoder plus fake outputs | Completed in Cycle 19 |
 | — | Bound decoded image dimensions before resize | Security / resources | High: compressed images bypassed the byte-size limit after decoding | Small / low | 50-megapixel ceiling | Completed in Cycle 18 |
@@ -781,3 +782,56 @@ constant prevents configuration drift more reliably than duplicated literals.
 **Next opportunity:** Apply JPEG EXIF orientation before RGB conversion and
 resize, with an in-memory rotated-photo fixture proving mobile uploads reach
 the model upright.
+
+### Cycle 21 — Honor JPEG EXIF orientation (2026-08-10)
+
+**Why this won:** Phone cameras commonly store landscape pixel arrays with an
+EXIF orientation tag instead of rewriting pixels. The preprocessor opened,
+converted, and resized stored pixels directly, so a valid portrait upload could
+reach the classifier sideways and reduce prediction quality without any error.
+
+**Plan and success criteria**
+
+1. Build an asymmetric in-memory JPEG whose orientation tag moves left/right
+   colors to top/bottom when displayed correctly.
+2. Keep decoded pixel-count validation before any transpose/decode work.
+3. Apply orientation before RGB conversion and resize.
+4. Prove spatial color placement, then run every model-free contract.
+
+**Changes**
+
+- Applied `ImageOps.exif_transpose` immediately after the decoded-dimension
+  guard and before color conversion or resize.
+- Added an orientation-6 JPEG fixture with red stored pixels on the left and
+  blue on the right; the displayed/model tensor must have red on top and blue
+  on the bottom.
+- Documented phone-photo orientation handling in the API response contract.
+
+**Verification evidence**
+
+- Test-first evidence: without EXIF handling, top red and blue channel means
+  were both approximately `0.498`, proving the sideways stored layout reached
+  resize unchanged.
+- After the fix, the focused orientation test passed and verified red-dominant
+  top pixels plus blue-dominant bottom pixels.
+- `.venv/bin/python -m pytest -q`: 68 passed in 1.26s (up from 67).
+- `.venv/bin/python -m compileall -q api tests run.py`, lightweight import
+  contracts, and CRLF-aware `git diff --check`: passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 6/10 | 9/10 | Model pixels now match the photo's displayed orientation |
+| Test coverage / verifiability | 5/10 | 10/10 | A spatially asymmetric real JPEG proves the transform |
+| Maintainability | 8/10 | 9/10 | Standard Pillow normalization replaces custom orientation logic |
+| Performance / resources | 8/10 | 8/10 | One bounded transpose occurs before the existing 224×224 resize |
+| Security / robustness | 9/10 | 9/10 | Pixel-count validation remains ahead of transpose/decode allocation |
+
+**Lesson / process improvement:** Image validity is not the same as semantic
+orientation. Use a spatially asymmetric fixture so a preprocessing test proves
+pixel placement rather than merely output shape.
+
+**Next opportunity:** Inspect Pillow's decoded `image.format` and reject
+anything except JPEG/PNG even when a client supplies an allowed MIME header,
+with renamed WebP/GIF fixtures at the utility and endpoint boundaries.

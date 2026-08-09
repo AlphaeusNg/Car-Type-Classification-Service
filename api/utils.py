@@ -6,7 +6,7 @@ Helper functions for image preprocessing and model loading
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 import json
 import io
 from typing import TYPE_CHECKING, Dict, Any
@@ -83,7 +83,8 @@ def preprocess_image(image_data: bytes) -> np.ndarray:
         # Load image from bytes
         image = Image.open(io.BytesIO(image_data))
         validate_image_dimensions(image.size)
-        
+        image = ImageOps.exif_transpose(image)
+
         # Convert to RGB if needed
         if image.mode != 'RGB':
             image = image.convert('RGB')

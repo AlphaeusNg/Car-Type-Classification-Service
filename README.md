@@ -120,6 +120,8 @@ labels, and then returns HTTP 200 with `"status": "healthy"`.
 The API accepts inference output only when it is one non-empty, finite numeric
 score row whose width matches `class_mapping.json`. Invalid model output is
 logged server-side and returned as the generic `Prediction failed` response.
+JPEG orientation metadata is applied before resize, so phone photos reach the
+model in their displayed orientation.
 
 ### Interactive Documentation
 - **Swagger UI**: http://localhost:8000/docs

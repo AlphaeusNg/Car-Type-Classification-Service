@@ -77,6 +77,22 @@ def test_preprocess_image_matches_shared_model_input_shape():
     assert preprocess_image(encoded.getvalue()).shape == PREPROCESSED_IMAGE_SHAPE
 
 
+def test_preprocess_image_applies_exif_orientation_before_resize():
+    source = Image.new("RGB", (40, 20), "red")
+    source.paste("blue", (20, 0, 40, 20))
+    exif = Image.Exif()
+    exif[274] = 6  # Display by rotating the stored pixels 90 degrees clockwise.
+    encoded = BytesIO()
+    source.save(encoded, format="JPEG", quality=100, subsampling=0, exif=exif)
+
+    pixels = preprocess_image(encoded.getvalue())[0]
+    top = pixels[:56].mean(axis=(0, 1))
+    bottom = pixels[-56:].mean(axis=(0, 1))
+
+    assert top[0] > top[2]
+    assert bottom[2] > bottom[0]
+
+
 @pytest.mark.parametrize("size", [(0, 100), (-1, 100), (10_001, 5_000)])
 def test_image_dimensions_reject_invalid_or_excessive_sizes(size):
     with pytest.raises(ValueError):
