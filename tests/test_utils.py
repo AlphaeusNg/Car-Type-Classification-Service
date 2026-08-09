@@ -3,11 +3,21 @@ from pathlib import Path
 
 import pytest
 
-from api.utils import load_class_mapping, load_model
+from api.utils import load_class_mapping, load_model, validate_image_dimensions
 
 
 class LoadedModel:
     input_shape = (None, 224, 224, 3)
+
+
+def test_image_dimensions_accept_decode_limit_boundary():
+    validate_image_dimensions((10_000, 5_000))
+
+
+@pytest.mark.parametrize("size", [(0, 100), (-1, 100), (10_001, 5_000)])
+def test_image_dimensions_reject_invalid_or_excessive_sizes(size):
+    with pytest.raises(ValueError):
+        validate_image_dimensions(size)
 
 
 def test_load_class_mapping_returns_valid_mapping(tmp_path):

@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 17: 39 model-free tests cover the API boundary,
+- Baseline after Cycle 18: 43 model-free tests cover the API boundary,
   lifecycle, lightweight import, and model artifact discovery/build command;
   GitHub Actions runs them without TensorFlow or trained weights.
 
@@ -15,7 +15,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Bound decoded image dimensions before resize | Security / resources | High: a small compressed image can expand far beyond the 10 MB upload limit | Small / low | Pillow dimension checks and generated fixtures | Next |
+| 1 | Validate prediction tensor shape and finite scores | Correctness / robustness | High: malformed model output can currently produce misleading rankings or generic indexing failures | Small / low | Pure prediction-decoding helper plus fake outputs | Next |
+| — | Bound decoded image dimensions before resize | Security / resources | High: compressed images bypassed the byte-size limit after decoding | Small / low | 50-megapixel ceiling | Completed in Cycle 18 |
 | — | Distinguish corrupt model artifacts from missing artifacts | Correctness / observability | High: loader falsely returned `FileNotFoundError` after deserialization failures | Small / low | Injected loader covers preference and fallback | Completed in Cycle 17 |
 | — | Preserve documented class-mapping error types | Correctness / test | Medium: invalid structure was rewrapped as `RuntimeError` | Small / low | Four isolated mapping fixtures | Completed in Cycle 16 |
 | — | Split training and API runtime dependencies | Performance / deploy | High: Docker installed notebook, plotting, dataset, and training packages | Medium / medium | Pinned inference manifest | Completed in Cycle 15 |
@@ -615,3 +616,46 @@ deserializers to test that state machine cheaply.
 **Next opportunity:** Enforce a decoded pixel-count ceiling in image
 preprocessing so compressed image bombs cannot bypass the byte-size upload
 limit and exhaust memory before resizing.
+
+### Cycle 18 — Bound decoded image dimensions (2026-08-09)
+
+**Why this won:** The HTTP boundary limited compressed uploads to 10 MB, but a
+small file can declare or decompress into hundreds of millions of pixels.
+Pillow opened the image before resize, so conversion/NumPy allocation could
+consume disproportionate memory.
+
+**Plan and success criteria**
+
+1. Validate positive dimensions immediately after opening the image.
+2. Reject more than 50 megapixels before conversion, resize, or array creation.
+3. Cover exact-boundary, zero/negative, and over-limit dimensions cheaply.
+
+**Changes**
+
+- Added `MAX_DECODED_PIXELS` and `validate_image_dimensions`.
+- Called the guard immediately after `Image.open` and before decoded-pixel work.
+- Added four dimension boundary cases.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 43 passed (up from 39).
+- Python compilation and CRLF-aware diff checks passed.
+- Exactly 50,000,000 pixels passes; invalid dimensions and 50,005,000 pixels
+  fail before allocation.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 6/10 | 9/10 | Decode resource policy is explicit and deterministic |
+| Test coverage / verifiability | 4/10 | 9/10 | Boundary and malformed dimensions have pure tests |
+| Maintainability | 6/10 | 8/10 | One named constant/helper owns the policy |
+| Performance / resources | 3/10 | 9/10 | Excessive images stop before RGB/NumPy allocation |
+| Security / safety | 4/10 | 9/10 | Compressed image bombs cannot rely only on byte size |
+
+**Lesson / process improvement:** Validate both encoded bytes and decoded
+dimensions for media uploads. Put dimension checks before operations that force
+pixel decoding or large allocations.
+
+**Next opportunity:** Extract prediction decoding and reject non-2D, wrong-width,
+non-finite, or empty score vectors before ranking and class lookup.

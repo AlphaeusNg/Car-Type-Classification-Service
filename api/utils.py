@@ -15,6 +15,17 @@ from pathlib import Path
 if TYPE_CHECKING:
     import tensorflow as tf
 
+MAX_DECODED_PIXELS = 50_000_000
+
+
+def validate_image_dimensions(size, max_pixels=MAX_DECODED_PIXELS):
+    """Reject invalid or excessive decoded dimensions before pixel allocation."""
+    width, height = size
+    if width <= 0 or height <= 0:
+        raise ValueError("Image dimensions must be positive")
+    if width * height > max_pixels:
+        raise ValueError(f"Image exceeds the {max_pixels:,}-pixel decode limit")
+
 
 def preprocess_image(image_data: bytes) -> np.ndarray:
     """
@@ -29,6 +40,7 @@ def preprocess_image(image_data: bytes) -> np.ndarray:
     try:
         # Load image from bytes
         image = Image.open(io.BytesIO(image_data))
+        validate_image_dimensions(image.size)
         
         # Convert to RGB if needed
         if image.mode != 'RGB':
