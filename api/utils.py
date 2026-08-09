@@ -51,7 +51,7 @@ def preprocess_image(image_data: bytes) -> np.ndarray:
     except Exception as e:
         raise ValueError(f"Failed to preprocess image: {str(e)}")
 
-def load_model() -> tf.keras.Model:
+def load_model(project_root: Path | None = None, model_loader=None) -> tf.keras.Model:
     """
     Load the trained car classification model
     
@@ -62,11 +62,16 @@ def load_model() -> tf.keras.Model:
         FileNotFoundError: If no model file is found
         RuntimeError: If model loading fails
     """
-    import tensorflow as tf
+    if model_loader is None:
+        import tensorflow as tf
 
-    # Get project root directory
-    current_dir = Path(__file__).parent
-    project_root = current_dir.parent
+        model_loader = tf.keras.models.load_model
+
+    if project_root is None:
+        current_dir = Path(__file__).parent
+        project_root = current_dir.parent
+    else:
+        project_root = Path(project_root)
     
     # Try different model formats in order of preference
     model_paths = [
@@ -75,17 +80,25 @@ def load_model() -> tf.keras.Model:
         project_root / "models" / "car_classification_savedmodel",  # SavedModel
     ]
     
+    load_failures = []
     for model_path in model_paths:
         if model_path.exists():
             try:
                 print(f"🔄 Loading model from: {model_path}")
-                model = tf.keras.models.load_model(str(model_path))
+                model = model_loader(str(model_path))
                 print(f"✅ Model loaded! Input shape: {model.input_shape}")
                 return model
             except Exception as e:
                 print(f"⚠️ Failed to load {model_path}: {e}")
+                load_failures.append(f"{model_path}: {type(e).__name__}: {e}")
                 continue
-    
+
+    if load_failures:
+        raise RuntimeError(
+            "❌ Model artifacts were found but none could be loaded:\n"
+            + "\n".join(load_failures)
+        )
+
     # No model found - provide helpful error
     available_files = [f.name for f in project_root.iterdir() 
                       if f.suffix in ['.h5', '.keras'] or 'model' in f.name.lower()]

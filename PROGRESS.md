@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 16: 35 model-free tests cover the API boundary,
+- Baseline after Cycle 17: 39 model-free tests cover the API boundary,
   lifecycle, lightweight import, and model artifact discovery/build command;
   GitHub Actions runs them without TensorFlow or trained weights.
 
@@ -15,7 +15,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Distinguish corrupt model artifacts from missing artifacts | Correctness / observability | High: loader currently ends with `FileNotFoundError` after every existing candidate fails to deserialize | Small / low | Inject a model loader to test failure aggregation without TensorFlow | Next |
+| 1 | Bound decoded image dimensions before resize | Security / resources | High: a small compressed image can expand far beyond the 10 MB upload limit | Small / low | Pillow dimension checks and generated fixtures | Next |
+| — | Distinguish corrupt model artifacts from missing artifacts | Correctness / observability | High: loader falsely returned `FileNotFoundError` after deserialization failures | Small / low | Injected loader covers preference and fallback | Completed in Cycle 17 |
 | — | Preserve documented class-mapping error types | Correctness / test | Medium: invalid structure was rewrapped as `RuntimeError` | Small / low | Four isolated mapping fixtures | Completed in Cycle 16 |
 | — | Split training and API runtime dependencies | Performance / deploy | High: Docker installed notebook, plotting, dataset, and training packages | Medium / medium | Pinned inference manifest | Completed in Cycle 15 |
 | — | Validate CLI ports before launching Uvicorn/Docker | Correctness / UX | Medium: invalid ports reached setup/launch | Small / low | Seven boundary cases | Completed in Cycle 14 |
@@ -568,3 +569,49 @@ artifact-loading contract.
 **Next opportunity:** Make `load_model` aggregate deserialization failures and
 raise `RuntimeError` when candidates exist but are corrupt/incompatible, while
 retaining `FileNotFoundError` only for truly absent artifacts.
+
+### Cycle 17 — Distinguish missing and corrupt models (2026-08-09)
+
+**Why this won:** The loader tried every existing model candidate, printed each
+deserialization failure, then raised `FileNotFoundError` claiming no model was
+found. That diagnosis sent operators toward retraining or path fixes instead of
+the actual compatibility/corruption problem.
+
+**Plan and success criteria**
+
+1. Keep preference/fallback behavior across all supported paths.
+2. Aggregate failures and raise `RuntimeError` when files exist but none load.
+3. Reserve `FileNotFoundError` for an actually empty candidate set and test all
+   branches without importing TensorFlow.
+
+**Changes**
+
+- Added optional project-root and deserializer injection to `load_model`.
+- Deferred TensorFlow import until no injected loader is supplied.
+- Aggregated per-path exception types/messages before raising a load failure.
+- Added preference, fallback, corrupt-candidates, and missing-candidates tests.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 39 passed (up from 35).
+- Python compilation and CRLF-aware diff checks passed.
+- Existing corrupt candidates now name every failed path under `RuntimeError`;
+  an empty temporary root still raises `FileNotFoundError`.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 3/10 | 9/10 | Missing and unloadable states now have distinct outcomes |
+| Test coverage / verifiability | 2/10 | 9/10 | Preference, fallback, aggregate failure, and absence are covered |
+| Maintainability | 5/10 | 8/10 | Model discovery/deserialization is dependency-injectable |
+| Performance | 8/10 | 8/10 | Existing fallback loop is unchanged |
+| Observability / DX | 3/10 | 9/10 | Startup reports every rejected artifact and cause |
+
+**Lesson / process improvement:** Exhaustive fallback logic must preserve the
+difference between “nothing existed” and “everything failed.” Inject heavy
+deserializers to test that state machine cheaply.
+
+**Next opportunity:** Enforce a decoded pixel-count ceiling in image
+preprocessing so compressed image bombs cannot bypass the byte-size upload
+limit and exhaust memory before resizing.
