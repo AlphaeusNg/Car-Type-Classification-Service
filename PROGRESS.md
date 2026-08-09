@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 10: 18 model-free tests cover the API boundary,
+- Baseline after Cycle 11: 19 model-free tests cover the API boundary,
   lifecycle, lightweight import, and model artifact discovery/build command;
   GitHub Actions runs them without TensorFlow or trained weights.
 
@@ -15,8 +15,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Add a focused `.dockerignore` | Performance / security | High: Docker currently sends the virtualenv, datasets, Git history, and local artifacts as build context | Small / low | Preserve selected model artifacts needed by `COPY` | Next |
-| 2 | Run the container as a non-root user | Security | Medium: inference does not need root inside the image | Small / low | Coordinate writable/cache paths if TensorFlow creates them | Backlog |
+| 1 | Run the container as a non-root user | Security | Medium: inference does not need root inside the image | Small / low | Coordinate writable/cache paths if TensorFlow creates them | Next |
+| — | Add a focused `.dockerignore` | Performance / security | High: Docker sent virtualenvs, datasets, Git history, and local artifacts as build context | Small / low | Allowlist retains all supported model shapes | Completed in Cycle 11 |
 | — | Add lightweight CI for API contract tests | Test / process | High compounding value: tests were local-only | Medium / low | Lazy TensorFlow import plus minimal dependency file | Completed in Cycle 10 |
 | — | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise failed only during a request | Small / low | Atomic lifespan validation | Completed in Cycle 9 |
 | — | Replace deprecated FastAPI startup events with lifespan | Reliability / maintainability | Medium: framework lifecycle compatibility | Small / low | Warning-free lifecycle test | Completed in Cycle 8 |
@@ -117,9 +117,10 @@ standard deployment path.
 - `git -c core.whitespace=cr-at-eol diff --check`: passed.
 - Tests verify `.keras` preference, H5 fallback, SavedModel directory support,
   Docker build-argument propagation, and no Docker call when weights are absent.
-- A real Docker image build was not possible because trained weights are
-  intentionally absent from this checkout; this is an external artifact
-  boundary, not a passing claim.
+- A full Docker image build was not run because reinstalling the pinned
+  TensorFlow stack is expensive; command construction was tested. Cycle 11
+  later confirmed ignored local weights are present and added static Dockerfile
+  checks for each supported shape.
 
 **Scores (change-specific)**
 
@@ -278,3 +279,55 @@ in a fresh environment before trusting a workflow definition.
 **Next opportunity:** Add `.dockerignore` rules that exclude Git metadata,
 virtualenvs, datasets, caches, notebooks, and test-only files while retaining
 the selected external model artifact.
+
+### Cycle 11 — Bound the Docker build context (2026-08-09)
+
+**Why this won:** The local checkout occupied 5.1 GB, including a 2.6 GB
+virtualenv and 1.9 GB dataset. Without `.dockerignore`, every build could send
+all of it to the Docker daemon even though the Dockerfile consumes only API
+source, requirements, mapping, and one model artifact.
+
+**Plan and success criteria**
+
+1. Default-deny the context and re-include only Docker inputs.
+2. Preserve `.keras`, H5, and SavedModel artifact paths supported by Cycle 7.
+3. Add a contract test and run Docker's static build check with each locally
+   available artifact argument.
+
+**Changes**
+
+- Added an allowlist-style `.dockerignore` excluding Git data, virtualenvs,
+  datasets, notebooks, tests, caches, and unrelated outputs.
+- Added a regression test requiring the default-deny rule and every necessary
+  runtime inclusion.
+- Corrected Cycle 7's inference from tracked files: ignored model weights are
+  present locally even though they are intentionally absent from Git.
+
+**Verification evidence**
+
+- Pre-change measurement: repository 5.1 GB; `.venv` 2.6 GB; `data` 1.9 GB;
+  `models` 192 MB, plus root `.keras` and H5 artifacts. The allowlisted files
+  total about 615 MB, an approximately 88% reduction before Docker's own
+  transfer/compression behavior.
+- `python -m pytest -q`: 19 tests passed.
+- `docker build --check` reported no warnings for default `.keras`, H5, and
+  SavedModel `MODEL_PATH` arguments. This is a static Dockerfile check, not a
+  claim that full COPY and dependency-install stages were built.
+- Python compilation and CRLF-aware diff checks passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 7/10 | 9/10 | Every Docker COPY input is explicit and contract-tested |
+| Test coverage / verifiability | 6/10 | 8/10 | Ignore policy and three artifact arguments are statically checked |
+| Maintainability | 5/10 | 9/10 | Context contents now follow a short allowlist |
+| Performance / resources | 2/10 | 8/10 | Multi-gigabyte unrelated directories are excluded |
+| Security / safety | 4/10 | 9/10 | Local secrets/environments and Git metadata cannot enter context |
+
+**Lesson / process improvement:** Inspect ignored filesystem state as well as
+tracked files when evaluating packaging. For narrow Dockerfiles, a context
+allowlist is safer and easier to audit than accumulating exclusions.
+
+**Next opportunity:** Create and switch to a non-root runtime user in the image,
+then verify the Dockerfile and health/prediction read paths need no root access.
