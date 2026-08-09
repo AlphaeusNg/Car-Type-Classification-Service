@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 13: 22 model-free tests cover the API boundary,
+- Baseline after Cycle 14: 29 model-free tests cover the API boundary,
   lifecycle, lightweight import, and model artifact discovery/build command;
   GitHub Actions runs them without TensorFlow or trained weights.
 
@@ -15,7 +15,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Validate CLI ports before launching Uvicorn/Docker | Correctness / UX | Medium: argparse currently accepts negative and out-of-range ports | Small / low | Add a typed argparse validator and boundary tests | Next |
+| 1 | Split training and API runtime dependencies | Performance / deploy | High: Docker installs Jupyter, plotting, dataset, and training packages unused by inference | Medium / medium | Preserve TensorFlow/Keras/Pillow/FastAPI compatibility | Next |
+| — | Validate CLI ports before launching Uvicorn/Docker | Correctness / UX | Medium: invalid ports reached setup/launch | Small / low | Seven boundary cases | Completed in Cycle 14 |
 | — | Replace `shell=True` runner commands with argument vectors | Security / portability | High: shell strings and unconditional `sudo` made workflows brittle | Medium / medium | Interactive processes retain inherited terminal | Completed in Cycle 13 |
 | — | Run the container as a non-root user | Security | Medium: inference does not need root inside the image | Small / low | Writable home plus read-only app/model access | Completed in Cycle 12 |
 | — | Add a focused `.dockerignore` | Performance / security | High: Docker sent virtualenvs, datasets, Git history, and local artifacts as build context | Small / low | Allowlist retains all supported model shapes | Completed in Cycle 11 |
@@ -427,3 +428,45 @@ use the same no-shell invariant for both.
 
 **Next opportunity:** Add an argparse port validator covering 1–65535 so invalid
 ports fail immediately with a clear CLI error before setup or launch work.
+
+### Cycle 14 — Validate CLI ports early (2026-08-09)
+
+**Why this won:** `argparse` converted ports to integers but accepted `0`,
+negative numbers, and values above 65535. Those inputs triggered environment
+setup before Uvicorn or Docker eventually failed with less useful errors.
+
+**Plan and success criteria**
+
+1. Parse and range-check ports in the CLI boundary.
+2. Accept both numeric strings and integers across the full TCP range.
+3. Reject malformed and out-of-range values before invoking any workflow.
+
+**Changes**
+
+- Added `valid_port` using `argparse.ArgumentTypeError` with clear messages.
+- Wired `--port` to the validator.
+- Added three valid and four invalid boundary cases.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 29 passed (up from 22).
+- `.venv/bin/python run.py --help`: passed.
+- Python compilation and CRLF-aware diff checks passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 5/10 | 9/10 | All invalid TCP port classes fail at parsing |
+| Test coverage / verifiability | 5/10 | 9/10 | Both range boundaries and malformed input are covered |
+| Maintainability | 7/10 | 8/10 | Port policy is one named parser function |
+| Performance / resources | 7/10 | 8/10 | Invalid runs stop before environment setup |
+| Developer experience | 5/10 | 9/10 | argparse reports the constraint immediately |
+
+**Lesson / process improvement:** Validate CLI values at parsing time when the
+constraint is intrinsic. This prevents expensive setup from masking a simple
+input error.
+
+**Next opportunity:** Separate production inference requirements from notebook,
+plotting, dataset, and training dependencies so Docker installs only what the
+API needs.

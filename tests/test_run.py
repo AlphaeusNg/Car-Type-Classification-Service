@@ -1,6 +1,9 @@
 from pathlib import Path
 import subprocess
 
+import argparse
+import pytest
+
 import run
 
 
@@ -12,6 +15,17 @@ def test_model_discovery_matches_loader_preference(tmp_path):
     preferred = tmp_path / "best_car_model.keras"
     preferred.touch()
     assert run.find_model_artifact(tmp_path) == preferred
+
+
+@pytest.mark.parametrize("value", ["1", 8000, "65535"])
+def test_valid_port_accepts_tcp_range(value):
+    assert run.valid_port(value) == int(value)
+
+
+@pytest.mark.parametrize("value", ["not-a-port", 0, -1, 65536])
+def test_valid_port_rejects_invalid_values(value):
+    with pytest.raises(argparse.ArgumentTypeError):
+        run.valid_port(value)
 
 
 def test_model_discovery_accepts_savedmodel_directory(tmp_path):

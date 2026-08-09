@@ -25,6 +25,17 @@ MODEL_CANDIDATES = (
 CLASS_MAPPING_PATH = Path("class_mapping.json")
 
 
+def valid_port(value):
+    """Parse a TCP port for argparse and reject invalid ranges early."""
+    try:
+        port = int(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError("port must be an integer") from exc
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
+    return port
+
+
 def find_model_artifact(root=Path(".")):
     """Return the first model artifact supported by api.utils.load_model."""
     for relative_path in MODEL_CANDIDATES:
@@ -358,7 +369,7 @@ Examples:
     
     parser.add_argument('--mode', choices=['local', 'docker'], 
                        help='Deployment mode: local (uvicorn) or docker')
-    parser.add_argument('--port', type=int, default=DEFAULT_PORT,
+    parser.add_argument('--port', type=valid_port, default=DEFAULT_PORT,
                        help=f'Port to run the API (default: {DEFAULT_PORT})')
     parser.add_argument('--setup', action='store_true',
                        help='Setup project environment only')
