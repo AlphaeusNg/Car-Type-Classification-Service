@@ -11,7 +11,7 @@ def test_docker_context_is_allowlisted_and_keeps_supported_artifacts():
     assert rules[0] == "**"
     assert {
         "!Dockerfile",
-        "!requirements.txt",
+        "!requirements-api.txt",
         "!api/**",
         "!class_mapping.json",
         "!best_car_model.keras",

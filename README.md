@@ -71,6 +71,12 @@ required to verify health, upload validation, error handling, and response
 ranking. CI installs `requirements-test.txt`; TensorFlow remains a runtime and
 training dependency and is imported only when a real model is loaded.
 
+Dependency manifests are intentionally scoped:
+
+- `requirements-api.txt`: production API/Docker inference only.
+- `requirements-test.txt`: fast model-free contract tests and CI.
+- `requirements.txt`: complete training, notebook, analysis, and API workspace.
+
 `run.py` and the Docker build accept the same model formats as the API loader:
 `best_car_model.keras`, `car_classification_model.h5`, or
 `models/car_classification_savedmodel`. For a manual Docker build, select the

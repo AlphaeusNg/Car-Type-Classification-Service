@@ -15,12 +15,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first to leverage Docker cache
-COPY requirements.txt .
+# Copy inference-only requirements first to leverage Docker cache
+COPY requirements-api.txt .
 
 # Upgrade pip first, then install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements-api.txt
 
 # Inference needs read-only application/model access, not root privileges.
 RUN groupadd --system app && \

@@ -3,7 +3,7 @@
 # remain outside the build context.
 **
 !Dockerfile
-!requirements.txt
+!requirements-api.txt
 !api/
 !api/**
 !class_mapping.json

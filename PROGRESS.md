@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 14: 29 model-free tests cover the API boundary,
+- Baseline after Cycle 15: 31 model-free tests cover the API boundary,
   lifecycle, lightweight import, and model artifact discovery/build command;
   GitHub Actions runs them without TensorFlow or trained weights.
 
@@ -15,7 +15,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Split training and API runtime dependencies | Performance / deploy | High: Docker installs Jupyter, plotting, dataset, and training packages unused by inference | Medium / medium | Preserve TensorFlow/Keras/Pillow/FastAPI compatibility | Next |
+| 1 | Preserve documented class-mapping error types | Correctness / test | Medium: invalid structure is documented as `ValueError` but wrapped as `RuntimeError` | Small / low | Add temporary mapping fixtures without loading TensorFlow | Next |
+| — | Split training and API runtime dependencies | Performance / deploy | High: Docker installed notebook, plotting, dataset, and training packages | Medium / medium | Pinned inference manifest | Completed in Cycle 15 |
 | — | Validate CLI ports before launching Uvicorn/Docker | Correctness / UX | Medium: invalid ports reached setup/launch | Small / low | Seven boundary cases | Completed in Cycle 14 |
 | — | Replace `shell=True` runner commands with argument vectors | Security / portability | High: shell strings and unconditional `sudo` made workflows brittle | Medium / medium | Interactive processes retain inherited terminal | Completed in Cycle 13 |
 | — | Run the container as a non-root user | Security | Medium: inference does not need root inside the image | Small / low | Writable home plus read-only app/model access | Completed in Cycle 12 |
@@ -470,3 +471,53 @@ input error.
 **Next opportunity:** Separate production inference requirements from notebook,
 plotting, dataset, and training dependencies so Docker installs only what the
 API needs.
+
+### Cycle 15 — Split production inference dependencies (2026-08-09)
+
+**Why this won:** The Docker image installed the full research workspace:
+Jupyter/JupyterLab, plotting, pandas/scikit-learn, dataset download tooling, and
+test packages. None are used by the FastAPI inference process, increasing build
+time, image size, dependency surface, and vulnerability exposure.
+
+**Plan and success criteria**
+
+1. Define an explicit pinned inference manifest containing only model loading,
+   preprocessing, and API-serving dependencies.
+2. Make Docker consume that manifest while preserving full training setup.
+3. Contract-test required/forbidden packages and validate dependency resolution
+   plus Dockerfile structure.
+
+**Changes**
+
+- Added `requirements-api.txt` for TensorFlow/Keras, FastAPI/Uvicorn,
+  multipart parsing, Pillow, and NumPy.
+- Switched Docker and its context allowlist from the full `requirements.txt` to
+  the inference manifest.
+- Added tests for runtime inclusions, training/test exclusions, and Dockerfile
+  usage; documented all three dependency scopes.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 31 passed (up from 29).
+- `pip install --dry-run -r requirements-api.txt`: dependency resolution
+  succeeded against the verified environment.
+- `docker build --check .`: no warnings.
+- Python compilation and CRLF-aware diff checks passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 7/10 | 9/10 | Docker dependencies now correspond directly to imported runtime modules |
+| Test coverage / verifiability | 6/10 | 9/10 | Runtime contents and Docker consumption are contract-tested |
+| Maintainability | 4/10 | 9/10 | Training, testing, and inference have distinct manifests |
+| Performance / resources | 3/10 | 9/10 | Large unused research packages are removed from image installation |
+| Security / safety | 5/10 | 8/10 | Production dependency surface is materially smaller |
+
+**Lesson / process improvement:** Dependency manifests should reflect deployment
+roles, not mirror a development workstation. Test both what a runtime manifest
+contains and what it deliberately excludes.
+
+**Next opportunity:** Correct `load_class_mapping` so malformed JSON/structure
+raises its documented `ValueError` rather than being caught and rewrapped as a
+generic `RuntimeError`, with isolated path-based fixtures.
