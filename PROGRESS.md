@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 15: 31 model-free tests cover the API boundary,
+- Baseline after Cycle 16: 35 model-free tests cover the API boundary,
   lifecycle, lightweight import, and model artifact discovery/build command;
   GitHub Actions runs them without TensorFlow or trained weights.
 
@@ -15,7 +15,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Preserve documented class-mapping error types | Correctness / test | Medium: invalid structure is documented as `ValueError` but wrapped as `RuntimeError` | Small / low | Add temporary mapping fixtures without loading TensorFlow | Next |
+| 1 | Distinguish corrupt model artifacts from missing artifacts | Correctness / observability | High: loader currently ends with `FileNotFoundError` after every existing candidate fails to deserialize | Small / low | Inject a model loader to test failure aggregation without TensorFlow | Next |
+| — | Preserve documented class-mapping error types | Correctness / test | Medium: invalid structure was rewrapped as `RuntimeError` | Small / low | Four isolated mapping fixtures | Completed in Cycle 16 |
 | — | Split training and API runtime dependencies | Performance / deploy | High: Docker installed notebook, plotting, dataset, and training packages | Medium / medium | Pinned inference manifest | Completed in Cycle 15 |
 | — | Validate CLI ports before launching Uvicorn/Docker | Correctness / UX | Medium: invalid ports reached setup/launch | Small / low | Seven boundary cases | Completed in Cycle 14 |
 | — | Replace `shell=True` runner commands with argument vectors | Security / portability | High: shell strings and unconditional `sudo` made workflows brittle | Medium / medium | Interactive processes retain inherited terminal | Completed in Cycle 13 |
@@ -521,3 +522,49 @@ contains and what it deliberately excludes.
 **Next opportunity:** Correct `load_class_mapping` so malformed JSON/structure
 raises its documented `ValueError` rather than being caught and rewrapped as a
 generic `RuntimeError`, with isolated path-based fixtures.
+
+### Cycle 16 — Preserve class-mapping error contracts (2026-08-09)
+
+**Why this won:** `load_class_mapping` documented malformed JSON/structure as
+`ValueError`, but its broad final handler caught the structure validation error
+and changed it to `RuntimeError`. Callers and tests could not reliably
+distinguish invalid user artifacts from operational I/O failures.
+
+**Plan and success criteria**
+
+1. Separate pure minimum-structure validation from file loading.
+2. Preserve `FileNotFoundError`, use `ValueError` for malformed JSON/shape, and
+   reserve `RuntimeError` for other read failures.
+3. Test all branches with temporary files and no TensorFlow import.
+
+**Changes**
+
+- Added `validate_class_mapping` and an optional path parameter for isolated
+  loader verification.
+- Opened mapping JSON explicitly as UTF-8 and preserved validation errors.
+- Added valid, invalid-JSON, invalid-structure, and missing-file tests.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 35 passed (up from 31).
+- Python compilation and CRLF-aware diff checks passed.
+- Missing keys now raise the documented `ValueError`; missing files remain
+  `FileNotFoundError`.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 4/10 | 9/10 | Each artifact failure class has a stable exception type |
+| Test coverage / verifiability | 2/10 | 9/10 | Four file/format paths are directly tested |
+| Maintainability | 5/10 | 8/10 | Pure structure validation is separated from I/O |
+| Performance | 9/10 | 9/10 | No material runtime change |
+| Developer experience | 4/10 | 8/10 | Startup failures now retain actionable categories |
+
+**Lesson / process improvement:** Do not place deliberate validation exceptions
+under a catch-all wrapper. Test documented exception types as part of the public
+artifact-loading contract.
+
+**Next opportunity:** Make `load_model` aggregate deserialization failures and
+raise `RuntimeError` when candidates exist but are corrupt/incompatible, while
+retaining `FileNotFoundError` only for truly absent artifacts.

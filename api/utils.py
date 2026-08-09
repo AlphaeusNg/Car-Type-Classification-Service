@@ -96,7 +96,17 @@ def load_model() -> tf.keras.Model:
         f"Please train the model first using: jupyter notebook model_training.ipynb"
     )
 
-def load_class_mapping() -> Dict[str, Any]:
+def validate_class_mapping(class_mapping: Any) -> Dict[str, Any]:
+    """Validate the minimum persisted mapping structure."""
+    required_keys = ["index_to_class", "class_to_index"]
+    if not isinstance(class_mapping, dict) or not all(
+        key in class_mapping for key in required_keys
+    ):
+        raise ValueError(f"Invalid mapping format. Required keys: {required_keys}")
+    return class_mapping
+
+
+def load_class_mapping(mapping_path: Path | None = None) -> Dict[str, Any]:
     """
     Load class mapping for car types
     
@@ -108,9 +118,12 @@ def load_class_mapping() -> Dict[str, Any]:
         ValueError: If class mapping format is invalid
     """
     # Get project root directory  
-    current_dir = Path(__file__).parent
-    project_root = current_dir.parent
-    mapping_path = project_root / 'class_mapping.json'
+    if mapping_path is None:
+        current_dir = Path(__file__).parent
+        project_root = current_dir.parent
+        mapping_path = project_root / "class_mapping.json"
+    else:
+        mapping_path = Path(mapping_path)
     
     if not mapping_path.exists():
         raise FileNotFoundError(
@@ -119,19 +132,17 @@ def load_class_mapping() -> Dict[str, Any]:
         )
     
     try:
-        with open(mapping_path, 'r') as f:
+        with open(mapping_path, "r", encoding="utf-8") as f:
             class_mapping = json.load(f)
-        
-        # Validate mapping structure
-        required_keys = ['index_to_class', 'class_to_index']
-        if not all(key in class_mapping for key in required_keys):
-            raise ValueError(f"Invalid mapping format. Required keys: {required_keys}")
-        
+
+        validate_class_mapping(class_mapping)
         print(f"✅ Class mapping loaded: {len(class_mapping['index_to_class'])} classes")
         return class_mapping
-        
+
     except json.JSONDecodeError as e:
         raise ValueError(f"❌ Invalid JSON in class mapping: {e}")
+    except ValueError:
+        raise
     except Exception as e:
         raise RuntimeError(f"❌ Failed to load class mapping: {e}")
 
