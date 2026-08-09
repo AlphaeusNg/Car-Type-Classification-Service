@@ -7,14 +7,17 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 9: 17 model-free tests cover the API boundary, lifecycle,
-  and model artifact discovery/build command contract with no warnings.
+- Baseline after Cycle 10: 18 model-free tests cover the API boundary,
+  lifecycle, lightweight import, and model artifact discovery/build command;
+  GitHub Actions runs them without TensorFlow or trained weights.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Add lightweight CI for API contract tests | Test / process | High compounding value: new tests are local-only | Medium / low | TensorFlow import makes a minimal CI environment non-trivial | Next |
+| 1 | Add a focused `.dockerignore` | Performance / security | High: Docker currently sends the virtualenv, datasets, Git history, and local artifacts as build context | Small / low | Preserve selected model artifacts needed by `COPY` | Next |
+| 2 | Run the container as a non-root user | Security | Medium: inference does not need root inside the image | Small / low | Coordinate writable/cache paths if TensorFlow creates them | Backlog |
+| — | Add lightweight CI for API contract tests | Test / process | High compounding value: tests were local-only | Medium / low | Lazy TensorFlow import plus minimal dependency file | Completed in Cycle 10 |
 | — | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise failed only during a request | Small / low | Atomic lifespan validation | Completed in Cycle 9 |
 | — | Replace deprecated FastAPI startup events with lifespan | Reliability / maintainability | Medium: framework lifecycle compatibility | Small / low | Warning-free lifecycle test | Completed in Cycle 8 |
 | — | Unify model artifact discovery in `run.py`, Docker, and the loader | Bug / deploy reliability | Critical: supported `.keras` models were rejected or omitted by launch/build paths | Medium / medium | Shared candidate order plus Docker build argument | Completed in Cycle 7 |
@@ -226,3 +229,52 @@ validated pair, not merely two non-null objects.
 **Next opportunity:** Add lightweight GitHub Actions coverage without requiring
 TensorFlow/model downloads by separating API contract imports from heavy model
 loading dependencies.
+
+### Cycle 10 — Add lightweight API CI (2026-08-09)
+
+**Why this won:** Eighteen reliable tests provide little compounding value if
+they run only in one local virtualenv. Importing `api.main` eagerly imported
+TensorFlow, forcing a large unrelated dependency into every contract test and
+making fast CI unnecessarily expensive.
+
+**Plan and success criteria**
+
+1. Keep TensorFlow imports on real model-loading/model-inspection paths only.
+2. Define a minimal pinned test dependency set and prove it in a fresh venv.
+3. Run tests and syntax compilation on pushes and pull requests.
+
+**Changes**
+
+- Made TensorFlow imports lazy in `api/utils.py` while retaining deferred type
+  annotations.
+- Added `requirements-test.txt` and a subprocess regression proving API import
+  does not touch TensorFlow.
+- Added `.github/workflows/ci.yml` for Python 3.12 tests and compilation.
+- Documented the runtime/test dependency split.
+
+**Verification evidence**
+
+- Existing environment: 18 tests passed in 1.08s, down from about 5.8s before
+  lazy import; compile and CRLF-aware diff checks passed.
+- Fresh temporary venv containing only `requirements-test.txt`: 18 tests passed
+  in 0.95s and compilation passed.
+- The subprocess test installs a TensorFlow import blocker before importing the
+  API, providing direct evidence that the lightweight boundary is real.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 8/10 | 9/10 | Every push/PR will execute the API and runner contracts |
+| Test coverage / verifiability | 3/10 | 9/10 | Clean-environment CI is now defined and reproduced locally |
+| Maintainability | 6/10 | 9/10 | Runtime and contract-test dependencies have explicit boundaries |
+| Performance / resources | 4/10 | 9/10 | Contract startup fell to ~1s and skips TensorFlow installation |
+| Developer experience | 5/10 | 9/10 | Small pinned requirements reproduce CI without model weights |
+
+**Lesson / process improvement:** A heavy dependency should load at the narrow
+runtime path that needs it, not at module import. Validate CI dependency files
+in a fresh environment before trusting a workflow definition.
+
+**Next opportunity:** Add `.dockerignore` rules that exclude Git metadata,
+virtualenvs, datasets, caches, notebooks, and test-only files while retaining
+the selected external model artifact.

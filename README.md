@@ -68,7 +68,8 @@ python3 -m pytest -q
 
 The tests use a lightweight fake predictor, so trained model files are not
 required to verify health, upload validation, error handling, and response
-ranking.
+ranking. CI installs `requirements-test.txt`; TensorFlow remains a runtime and
+training dependency and is imported only when a real model is loaded.
 
 `run.py` and the Docker build accept the same model formats as the API loader:
 `best_car_model.keras`, `car_classification_model.h5`, or

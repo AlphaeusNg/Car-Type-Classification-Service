@@ -3,13 +3,17 @@ Car Type Classification API Utilities
 Helper functions for image preprocessing and model loading
 """
 
-import tensorflow as tf
+from __future__ import annotations
+
 import numpy as np
 from PIL import Image
 import json
 import io
-from typing import Dict, Any
+from typing import TYPE_CHECKING, Dict, Any
 from pathlib import Path
+
+if TYPE_CHECKING:
+    import tensorflow as tf
 
 
 def preprocess_image(image_data: bytes) -> np.ndarray:
@@ -58,6 +62,8 @@ def load_model() -> tf.keras.Model:
         FileNotFoundError: If no model file is found
         RuntimeError: If model loading fails
     """
+    import tensorflow as tf
+
     # Get project root directory
     current_dir = Path(__file__).parent
     project_root = current_dir.parent
@@ -140,6 +146,8 @@ def get_model_info(model: tf.keras.Model) -> Dict[str, Any]:
     Returns:
         Dictionary with model metadata
     """
+    import tensorflow as tf
+
     return {
         "input_shape": model.input_shape,
         "output_shape": model.output_shape, 
