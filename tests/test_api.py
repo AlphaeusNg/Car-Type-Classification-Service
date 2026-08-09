@@ -18,6 +18,17 @@ class FakeModel:
         return np.array([self.predictions], dtype=np.float32)
 
 
+class RawOutputModel:
+    output_shape = (None, 5)
+
+    def __init__(self, output):
+        self.output = output
+
+    def predict(self, _image, verbose=0):
+        assert verbose == 0
+        return self.output
+
+
 @pytest.fixture(autouse=True)
 def reset_runtime(monkeypatch):
     monkeypatch.setattr(api, "model", None)
@@ -184,6 +195,26 @@ def test_predict_returns_ranked_classes(client, monkeypatch):
         "class-1",
         "class-0",
     ]
+
+
+def test_predict_rejects_non_finite_model_output_without_exposing_details(
+    client, monkeypatch
+):
+    make_ready(monkeypatch)
+    monkeypatch.setattr(
+        api,
+        "model",
+        RawOutputModel(np.array([[0.1, 0.2, np.nan, 0.3, 0.4]])),
+    )
+
+    response = client.post(
+        "/predict",
+        files={"image": ("car.png", b"image", "image/png")},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Prediction failed"
+    assert "finite" not in response.text
 
 
 def test_predict_does_not_expose_internal_errors(client, monkeypatch):

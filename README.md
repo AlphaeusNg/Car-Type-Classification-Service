@@ -116,6 +116,10 @@ class mapping are loaded, then HTTP 200 with `"status": "healthy"`.
 }
 ```
 
+The API accepts inference output only when it is one non-empty, finite numeric
+score row whose width matches `class_mapping.json`. Invalid model output is
+logged server-side and returned as the generic `Prediction failed` response.
+
 ### Interactive Documentation
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc

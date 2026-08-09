@@ -5,7 +5,6 @@ FastAPI service for predicting car make/model from images
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
-import numpy as np
 import logging
 from contextlib import asynccontextmanager
 from typing import Dict, Any
@@ -16,10 +15,20 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from api.utils import preprocess_image, load_model, load_class_mapping
+    from api.utils import (
+        decode_predictions,
+        load_class_mapping,
+        load_model,
+        preprocess_image,
+    )
 except ImportError:
     # Fallback for when running from api directory
-    from utils import preprocess_image, load_model, load_class_mapping
+    from utils import (
+        decode_predictions,
+        load_class_mapping,
+        load_model,
+        preprocess_image,
+    )
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -149,28 +158,8 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
     try:
         # Make prediction
         predictions = model.predict(processed_image, verbose=0)
-        
-        # Get top prediction
-        predicted_idx = np.argmax(predictions[0])
-        confidence = float(predictions[0][predicted_idx])
-        predicted_class = class_mapping['index_to_class'][str(predicted_idx)]
-        
-        # Get top 5 predictions
-        top5_indices = np.argsort(predictions[0])[-5:][::-1]
-        top5_predictions = [
-            {
-                "class": class_mapping['index_to_class'][str(idx)],
-                "confidence": float(predictions[0][idx])
-            }
-            for idx in top5_indices
-        ]
-        
-        return {
-            "predicted_class": predicted_class,
-            "confidence": confidence,
-            "top5_predictions": top5_predictions,
-            "status": "success"
-        }
+        decoded = decode_predictions(predictions, class_mapping["index_to_class"])
+        return {**decoded, "status": "success"}
         
     except Exception as e:
         logger.exception("Prediction failed")

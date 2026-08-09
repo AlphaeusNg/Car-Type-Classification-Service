@@ -27,6 +27,47 @@ def validate_image_dimensions(size, max_pixels=MAX_DECODED_PIXELS):
         raise ValueError(f"Image exceeds the {max_pixels:,}-pixel decode limit")
 
 
+def decode_predictions(predictions, index_to_class, top_k=5):
+    """Validate and rank one model score row against its class mapping."""
+    try:
+        scores = np.asarray(predictions, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Prediction scores must be numeric") from exc
+
+    if scores.ndim != 2:
+        raise ValueError("Prediction output must be a 2D batch")
+    if scores.shape[0] != 1:
+        raise ValueError("Prediction output must contain exactly one score row")
+    if scores.shape[1] == 0:
+        raise ValueError("Prediction output must contain at least one score")
+    if not isinstance(index_to_class, dict):
+        raise ValueError("Prediction class mapping must be an object")
+    if scores.shape[1] != len(index_to_class):
+        raise ValueError("Prediction output width does not match class mapping")
+    expected_keys = {str(index) for index in range(scores.shape[1])}
+    if set(index_to_class) != expected_keys:
+        raise ValueError("Prediction class mapping indices must be contiguous")
+    if not np.isfinite(scores).all():
+        raise ValueError("Prediction scores must all be finite")
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
+        raise ValueError("top_k must be a positive integer")
+
+    score_row = scores[0]
+    ranked_indices = np.argsort(score_row)[-min(top_k, len(score_row)):][::-1]
+    predicted_idx = int(ranked_indices[0])
+    return {
+        "predicted_class": index_to_class[str(predicted_idx)],
+        "confidence": float(score_row[predicted_idx]),
+        "top5_predictions": [
+            {
+                "class": index_to_class[str(int(index))],
+                "confidence": float(score_row[index]),
+            }
+            for index in ranked_indices
+        ],
+    }
+
+
 def preprocess_image(image_data: bytes) -> np.ndarray:
     """
     Preprocess image for model inference

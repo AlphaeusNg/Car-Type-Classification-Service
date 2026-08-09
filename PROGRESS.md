@@ -7,15 +7,17 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 18: 43 model-free tests cover the API boundary,
-  lifecycle, lightweight import, and model artifact discovery/build command;
-  GitHub Actions runs them without TensorFlow or trained weights.
+- Baseline after Cycle 19: 58 model-free tests cover the API boundary,
+  lifecycle, prediction decoding, lightweight import, and model artifact
+  discovery/build command; GitHub Actions runs them without TensorFlow or
+  trained weights.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Validate prediction tensor shape and finite scores | Correctness / robustness | High: malformed model output can currently produce misleading rankings or generic indexing failures | Small / low | Pure prediction-decoding helper plus fake outputs | Next |
+| 1 | Validate model input shape against preprocessing | Correctness / reliability | High: an incompatible artifact can pass readiness then fail every request | Small / low | Preprocessing always emits `(None, 224, 224, 3)`; startup already validates output shape | Next |
+| — | Validate prediction tensor shape and finite scores | Correctness / robustness | High: malformed model output produced misleading rankings or generic indexing failures | Small / low | Pure decoder plus fake outputs | Completed in Cycle 19 |
 | — | Bound decoded image dimensions before resize | Security / resources | High: compressed images bypassed the byte-size limit after decoding | Small / low | 50-megapixel ceiling | Completed in Cycle 18 |
 | — | Distinguish corrupt model artifacts from missing artifacts | Correctness / observability | High: loader falsely returned `FileNotFoundError` after deserialization failures | Small / low | Injected loader covers preference and fallback | Completed in Cycle 17 |
 | — | Preserve documented class-mapping error types | Correctness / test | Medium: invalid structure was rewrapped as `RuntimeError` | Small / low | Four isolated mapping fixtures | Completed in Cycle 16 |
@@ -659,3 +661,64 @@ pixel decoding or large allocations.
 
 **Next opportunity:** Extract prediction decoding and reject non-2D, wrong-width,
 non-finite, or empty score vectors before ranking and class lookup.
+
+### Cycle 19 — Validate prediction output before ranking (2026-08-10)
+
+**Why this won:** The endpoint indexed `predictions[0]` and ranked it directly.
+A one-dimensional, empty, multi-row, wrong-width, non-numeric, NaN, or infinite
+model result could therefore raise an opaque indexing/mapping error or return a
+misleading non-finite ranking. This was the workspace's highest-impact
+small/low-risk open correctness item after the portfolio cycles.
+
+**Plan and success criteria**
+
+1. Extract score decoding into a pure helper with no TensorFlow dependency.
+2. Accept exactly one non-empty numeric row matching contiguous mapping keys.
+3. Reject every non-finite score before `argmax`/sorting and preserve the safe
+   generic HTTP 500 boundary.
+4. Prove valid ranking and every malformed class with model-free tests.
+
+**Changes**
+
+- Added `decode_predictions`, which converts tensor-like output to numeric
+  NumPy scores, validates rank/batch/width/mapping/finiteness, bounds top-k to
+  the available classes, and only then ranks results.
+- Replaced inline endpoint indexing and sorting with the validated helper and
+  removed the now-unneeded NumPy import from the API module.
+- Added one valid ranking case, nine malformed-output cases, four invalid top-k
+  cases, and an endpoint regression proving non-finite diagnostics remain
+  server-side.
+- Documented the model-output contract in the API response section.
+
+**Verification evidence**
+
+- Test-first evidence: the focused suite initially failed to import the absent
+  `decode_predictions` helper.
+- `.venv/bin/python -m pytest -q`: 58 passed in 1.10s (up from 43 in 1.42s).
+- Invalid fixtures cover one- and three-dimensional arrays, multiple rows,
+  empty width, mapping-width/key mismatch, NaN, infinity, and non-numeric
+  scores; invalid top-k values also fail explicitly.
+- The endpoint returns only `{"detail": "Prediction failed"}` for a NaN model
+  output; the word `finite` does not reach the client.
+- Lightweight-import/dependency contracts: three focused tests passed without
+  importing TensorFlow.
+- `.venv/bin/python -m compileall -q api tests run.py` and CRLF-aware
+  `git diff --check`: passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 4/10 | 9/10 | Invalid output cannot reach ranking or class lookup |
+| Test coverage / verifiability | 3/10 | 10/10 | Every specified malformed class plus HTTP containment is exercised |
+| Maintainability | 6/10 | 9/10 | One pure helper owns prediction shape, mapping, and ranking policy |
+| Performance / resources | 8/10 | 8/10 | Validation is linear over 196 scores and reuses one converted array |
+| Security / robustness | 6/10 | 9/10 | NaN/infinity and internal diagnostics fail closed behind the API boundary |
+
+**Lesson / process improvement:** Validate untrusted model output as strictly as
+client input. Extract decoding before testing it so malformed tensor contracts
+stay cheap, deterministic, and independent of trained weights.
+
+**Next opportunity:** Validate the loaded model's input shape against the
+preprocessor's fixed `(None, 224, 224, 3)` contract during lifespan, so an
+incompatible artifact never reports ready and fails every request.
