@@ -65,6 +65,22 @@ def test_health_reports_ready_model(client, monkeypatch):
     assert response.json()["total_classes"] == 5
 
 
+def test_lifespan_loads_dependencies_before_serving(monkeypatch):
+    loaded_model = FakeModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    loaded_mapping = {
+        "index_to_class": {str(index): f"class-{index}" for index in range(5)}
+    }
+    monkeypatch.setattr(api, "load_model", lambda: loaded_model)
+    monkeypatch.setattr(api, "load_class_mapping", lambda: loaded_mapping)
+
+    with TestClient(api.app) as lifecycle_client:
+        response = lifecycle_client.get("/health")
+
+    assert response.status_code == 200
+    assert api.model is loaded_model
+    assert api.class_mapping is loaded_mapping
+
+
 def test_predict_returns_service_unavailable_before_model_load(client):
     response = client.post(
         "/predict",

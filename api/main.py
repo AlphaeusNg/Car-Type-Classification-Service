@@ -7,6 +7,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 import numpy as np
 import logging
+from contextlib import asynccontextmanager
 from typing import Dict, Any
 import sys
 import os
@@ -24,24 +25,16 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI
-app = FastAPI(
-    title="🚗 Car Type Classification API",
-    description="AI service to identify car make/model/year from photos",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-
 # Global model and class mapping
 model = None
 class_mapping = None
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
-@app.on_event("startup")
-async def startup_event():
-    """Load model and class mapping on startup"""
+
+@asynccontextmanager
+async def lifespan(_app):
+    """Load inference dependencies before serving requests."""
     global model, class_mapping
     
     try:
@@ -52,6 +45,18 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ Failed to load model: {str(e)}")
         raise
+    yield
+
+
+# Initialize FastAPI
+app = FastAPI(
+    title="🚗 Car Type Classification API",
+    description="AI service to identify car make/model/year from photos",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
 
 
 @app.get("/")

@@ -7,16 +7,16 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 7: 13 model-free tests cover the API boundary and model
-  artifact discovery/build command contract.
+- Baseline after Cycle 8: 14 model-free tests cover the API boundary, lifecycle,
+  and model artifact discovery/build command contract with no warnings.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Replace deprecated FastAPI startup events with lifespan | Reliability / maintainability | Medium: current tests emit framework deprecation warnings | Small / low | FastAPI 0.116 lifespan API | Next |
+| 1 | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise fail only during a request | Small / low | Requires model output-shape contract | Next |
 | 2 | Add lightweight CI for API contract tests | Test / process | High compounding value: new tests are local-only | Medium / low | TensorFlow import makes a minimal CI environment non-trivial | Backlog |
-| 3 | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise fail only during a request | Small / low | Requires model output-shape contract | Backlog |
+| — | Replace deprecated FastAPI startup events with lifespan | Reliability / maintainability | Medium: framework lifecycle compatibility | Small / low | Warning-free lifecycle test | Completed in Cycle 8 |
 | — | Unify model artifact discovery in `run.py`, Docker, and the loader | Bug / deploy reliability | Critical: supported `.keras` models were rejected or omitted by launch/build paths | Medium / medium | Shared candidate order plus Docker build argument | Completed in Cycle 7 |
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
@@ -134,3 +134,47 @@ deployment logic stays verifiable when large external artifacts are absent.
 
 **Next opportunity:** Migrate startup loading to FastAPI lifespan, eliminate the
 two deprecation warnings, and preserve readiness behavior with lifecycle tests.
+
+### Cycle 8 — Adopt FastAPI lifespan startup (2026-08-09)
+
+**Why this won:** Every test emitted two deprecation warnings for
+`app.on_event("startup")`. The framework-supported lifespan API removes known
+upgrade risk, and a lifecycle-aware test can verify that readiness changes only
+after both dependencies load.
+
+**Plan and success criteria**
+
+1. Move model/mapping loading into an async lifespan context.
+2. Preserve fail-fast startup and existing readiness semantics.
+3. Add a `TestClient` lifecycle test and reach a warning-free suite.
+
+**Changes**
+
+- Replaced the deprecated startup decorator with an `asynccontextmanager`
+  lifespan passed to `FastAPI`.
+- Added a lifecycle test that injects fake dependencies, enters application
+  lifespan, and observes HTTP 200 readiness.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 14 passed, zero warnings (previously 13
+  passed with 2 deprecation warnings).
+- `.venv/bin/python -m compileall -q api tests run.py`: passed.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 7/10 | 9/10 | Actual lifecycle now proves dependencies load before readiness |
+| Test coverage / verifiability | 7/10 | 9/10 | Startup behavior is tested through ASGI lifespan |
+| Maintainability | 5/10 | 9/10 | Uses the supported FastAPI lifecycle API with no warnings |
+| Performance | 9/10 | 9/10 | Same one-time startup loading behavior |
+| Developer experience | 7/10 | 9/10 | Test output is warning-free and actionable |
+
+**Lesson / process improvement:** Treat deprecation warnings as backlog evidence,
+then eliminate them with a behavior-level lifecycle test rather than merely
+filtering warning output.
+
+**Next opportunity:** Validate the loaded model's output width against the class
+mapping during lifespan so incompatible artifacts fail before serving traffic.
