@@ -9,6 +9,7 @@ class FakeModel:
     def __init__(self, predictions=None, error=None):
         self.predictions = predictions
         self.error = error
+        self.output_shape = (None, len(predictions)) if predictions is not None else (None, 5)
 
     def predict(self, _image, verbose=0):
         assert verbose == 0
@@ -43,6 +44,14 @@ def make_ready(monkeypatch, predictions=None):
     )
 
 
+def mapping(size=5):
+    labels = {str(index): f"class-{index}" for index in range(size)}
+    return {
+        "index_to_class": labels,
+        "class_to_index": {label: int(index) for index, label in labels.items()},
+    }
+
+
 def test_health_is_unavailable_until_dependencies_load(client):
     response = client.get("/health")
 
@@ -67,9 +76,7 @@ def test_health_reports_ready_model(client, monkeypatch):
 
 def test_lifespan_loads_dependencies_before_serving(monkeypatch):
     loaded_model = FakeModel([0.05, 0.1, 0.6, 0.15, 0.1])
-    loaded_mapping = {
-        "index_to_class": {str(index): f"class-{index}" for index in range(5)}
-    }
+    loaded_mapping = mapping()
     monkeypatch.setattr(api, "load_model", lambda: loaded_model)
     monkeypatch.setattr(api, "load_class_mapping", lambda: loaded_mapping)
 
@@ -79,6 +86,31 @@ def test_lifespan_loads_dependencies_before_serving(monkeypatch):
     assert response.status_code == 200
     assert api.model is loaded_model
     assert api.class_mapping is loaded_mapping
+
+
+def test_runtime_artifacts_reject_model_mapping_width_mismatch():
+    with pytest.raises(ValueError, match="output width does not match"):
+        api.validate_runtime_artifacts(FakeModel([0.2, 0.3, 0.5]), mapping(5))
+
+
+def test_runtime_artifacts_reject_non_inverse_mapping():
+    invalid_mapping = mapping()
+    invalid_mapping["class_to_index"]["class-2"] = 4
+
+    with pytest.raises(ValueError, match="must be the inverse"):
+        api.validate_runtime_artifacts(FakeModel([0.05, 0.1, 0.6, 0.15, 0.1]), invalid_mapping)
+
+
+def test_lifespan_does_not_publish_incompatible_artifacts(monkeypatch):
+    monkeypatch.setattr(api, "load_model", lambda: FakeModel([0.2, 0.3, 0.5]))
+    monkeypatch.setattr(api, "load_class_mapping", lambda: mapping(5))
+
+    with pytest.raises(ValueError, match="output width does not match"):
+        with TestClient(api.app):
+            pass
+
+    assert api.model is None
+    assert api.class_mapping is None
 
 
 def test_predict_returns_service_unavailable_before_model_load(client):

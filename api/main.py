@@ -32,15 +32,54 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
+def validate_runtime_artifacts(loaded_model, loaded_mapping):
+    """Reject incompatible model and class-mapping artifacts at startup."""
+    if not isinstance(loaded_mapping, dict):
+        raise ValueError("class mapping must be an object")
+
+    index_to_class = loaded_mapping.get("index_to_class")
+    class_to_index = loaded_mapping.get("class_to_index")
+    if not isinstance(index_to_class, dict) or not index_to_class:
+        raise ValueError("index_to_class must be a non-empty object")
+    if not isinstance(class_to_index, dict):
+        raise ValueError("class_to_index must be an object")
+
+    output_shape = getattr(loaded_model, "output_shape", None)
+    if not isinstance(output_shape, (tuple, list)) or not output_shape:
+        raise ValueError("model must expose a single output shape")
+    if isinstance(output_shape[0], (tuple, list)):
+        raise ValueError("multi-output models are not supported")
+    try:
+        output_width = int(output_shape[-1])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("model output width must be known") from exc
+    if output_width <= 0:
+        raise ValueError("model output width must be positive")
+
+    if len(index_to_class) != output_width:
+        raise ValueError("model output width does not match class mapping")
+    expected_keys = {str(index) for index in range(output_width)}
+    if set(index_to_class) != expected_keys:
+        raise ValueError("index_to_class keys must be contiguous model output indices")
+    for index, label in index_to_class.items():
+        if class_to_index.get(label) != int(index):
+            raise ValueError("class_to_index must be the inverse of index_to_class")
+
+
 @asynccontextmanager
 async def lifespan(_app):
     """Load inference dependencies before serving requests."""
     global model, class_mapping
-    
+    model = None
+    class_mapping = None
+
     try:
         logger.info("🚀 Loading model and class mapping...")
-        model = load_model()
-        class_mapping = load_class_mapping()
+        loaded_model = load_model()
+        loaded_mapping = load_class_mapping()
+        validate_runtime_artifacts(loaded_model, loaded_mapping)
+        model = loaded_model
+        class_mapping = loaded_mapping
         logger.info("✅ Model and class mapping loaded successfully!")
     except Exception as e:
         logger.error(f"❌ Failed to load model: {str(e)}")

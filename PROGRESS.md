@@ -7,15 +7,15 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 8: 14 model-free tests cover the API boundary, lifecycle,
+- Baseline after Cycle 9: 17 model-free tests cover the API boundary, lifecycle,
   and model artifact discovery/build command contract with no warnings.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise fail only during a request | Small / low | Requires model output-shape contract | Next |
-| 2 | Add lightweight CI for API contract tests | Test / process | High compounding value: new tests are local-only | Medium / low | TensorFlow import makes a minimal CI environment non-trivial | Backlog |
+| 1 | Add lightweight CI for API contract tests | Test / process | High compounding value: new tests are local-only | Medium / low | TensorFlow import makes a minimal CI environment non-trivial | Next |
+| — | Validate model output width against class mapping at startup | Correctness | High: mismatched artifacts otherwise failed only during a request | Small / low | Atomic lifespan validation | Completed in Cycle 9 |
 | — | Replace deprecated FastAPI startup events with lifespan | Reliability / maintainability | Medium: framework lifecycle compatibility | Small / low | Warning-free lifecycle test | Completed in Cycle 8 |
 | — | Unify model artifact discovery in `run.py`, Docker, and the loader | Bug / deploy reliability | Critical: supported `.keras` models were rejected or omitted by launch/build paths | Medium / medium | Shared candidate order plus Docker build argument | Completed in Cycle 7 |
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
@@ -178,3 +178,51 @@ filtering warning output.
 
 **Next opportunity:** Validate the loaded model's output width against the class
 mapping during lifespan so incompatible artifacts fail before serving traffic.
+
+### Cycle 9 — Validate model/mapping compatibility (2026-08-09)
+
+**Why this won:** Startup previously treated any independently loadable model
+and mapping as ready. A mismatched class count or broken reverse mapping would
+surface only after accepting a prediction request, producing a generic 500.
+
+**Plan and success criteria**
+
+1. Require a single known positive model output width.
+2. Require `index_to_class` to exactly cover contiguous output indices and
+   `class_to_index` to be its inverse.
+3. Publish model/mapping globals atomically only after validation and prove a
+   failed lifespan never becomes ready.
+
+**Changes**
+
+- Added `validate_runtime_artifacts` at the inference startup boundary.
+- Changed lifespan to load into local variables and assign globals only after
+  compatibility succeeds.
+- Added width-mismatch, reverse-mapping, and atomic-failure tests; enhanced the
+  fake model with an output shape.
+
+**Verification evidence**
+
+- `.venv/bin/python -m pytest -q`: 17 passed, zero warnings (up from 14).
+- `.venv/bin/python -m compileall -q api tests run.py`: passed.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+- A three-output fake model paired with five labels now aborts lifespan, and
+  both readiness globals remain `None`.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 4/10 | 9/10 | Incompatible artifacts fail before serving traffic |
+| Test coverage / verifiability | 6/10 | 9/10 | Shape, inverse mapping, and atomic publication have direct tests |
+| Maintainability | 6/10 | 8/10 | One startup validator owns the artifact compatibility contract |
+| Performance | 9/10 | 9/10 | Validation is linear over 196 labels and runs once |
+| Security / safety | 8/10 | 8/10 | No external surface change; failure remains server-side |
+
+**Lesson / process improvement:** Related runtime resources should be loaded
+into locals, cross-validated, and published atomically. Readiness must reflect a
+validated pair, not merely two non-null objects.
+
+**Next opportunity:** Add lightweight GitHub Actions coverage without requiring
+TensorFlow/model downloads by separating API contract imports from heavy model
+loading dependencies.
