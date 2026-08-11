@@ -7,19 +7,24 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 24: 79 model-free tests cover the API boundary,
+- Baseline after Cycle 25: 80 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   decoded-image policy, lightweight import, and model artifact discovery/build
   command; 19 CI policy assertions keep the complete lightweight gate on
   supported action runtimes without TensorFlow or trained weights.
+- Dependency audit: the lightweight test graph has zero known vulnerabilities;
+  production resolution has 17 Keras-only findings constrained by real model
+  compatibility; the full training workspace has those plus 19 tooling findings.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Audit and refresh stale media/upload dependency pins | Security / maintenance | Medium-high: Pillow 10.0.0 and python-multipart 0.0.6 require evidence-based review | Medium / medium | Run a vulnerability audit and compatibility tests before changing pins | Next |
-| 2 | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permits extra reverse entries and weak label types | Small / low | Extend pure mapping fixtures and runtime artifact contracts | Backlog |
-| 3 | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction currently runs directly inside an async route with no admission control | Medium / medium-high | Requires a model-safe concurrency policy and request-level timing tests | Backlog |
+| 1 | Clear remaining non-Keras training-workspace audit findings | Security / maintenance | Medium-high: requests, notebook, JupyterLab, and python-dotenv retain 19 advisory records | Medium / medium | Resolve and smoke the notebook/tooling environment separately from inference | Next |
+| 2 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| 3 | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permits extra reverse entries and weak label types | Small / low | Extend pure mapping fixtures and runtime artifact contracts | Backlog |
+| 4 | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction currently runs directly inside an async route with no admission control | Medium / medium-high | Requires a model-safe concurrency policy and request-level timing tests | Backlog |
+| — | Audit and refresh deploy/test dependency pins | Security / maintenance | High: test and production resolution initially exposed 43 and 59 advisory records | Medium / medium | Fresh Python 3.12 tests, audits, and real model load separated safe upgrades from breaking Keras releases | Completed in Cycle 25 |
 | — | Modernize and policy-test GitHub Actions | Process / observability | Medium: hosted CI passed with Node 20 deprecation annotations and lacked timeout, permissions, or policy contracts | Small-medium / low | Nineteen policy assertions enforce the bounded v7 workflow | Completed in Cycle 24 |
 | — | Validate model output rank and batch metadata at startup | Correctness / reliability | High: rank-three or fixed multi-row outputs could report ready then fail every request | Small / low | Six rejection/acceptance contracts align startup with the runtime decoder | Completed in Cycle 23 |
 | — | Verify decoded image format instead of trusting MIME alone | Correctness / security | Medium: renamed unsupported formats passed the JPEG/PNG header check | Small / low | Real GIF/WebP fixtures at utility and endpoint boundaries | Completed in Cycle 22 |
@@ -1012,3 +1017,78 @@ the desired workflow shape locally so future updates cannot silently regress it.
 **Next opportunity:** Audit the production/test dependency pins for disclosed
 vulnerabilities, then update the smallest affected set in fresh lightweight and
 production-resolution environments before changing any version constraint.
+
+### Cycle 25 — Audit and refresh deploy/test dependencies (2026-08-11)
+
+**Why this won:** Exact pins from 2023–2025 made `pip check` pass while hiding
+known security advisories. A Python 3.12 audit found 43 vulnerability records in
+the lightweight test graph, 59 in production resolution, and 79 in the complete
+training workspace.
+
+**Plan and success criteria**
+
+1. Resolve every manifest with the project's Python 3.12 baseline.
+2. Update the smallest coherent deploy/test set and keep shared pins aligned.
+3. Require warning-free tests in a brand-new environment.
+4. Load and readiness-validate the real ignored model before accepting any
+   Keras change.
+5. Report, rather than conceal, compatibility-blocked or out-of-scope findings.
+
+**Changes**
+
+- Updated FastAPI to 0.139.2, explicitly pinned Starlette 1.6.0, updated
+  python-multipart to 0.0.32 and Pillow to 12.3.0 across their applicable
+  manifests, and updated pytest to 9.1.1.
+- Replaced the deprecated test-client dependency `httpx` with verified
+  `httpx2` 2.7.0.
+- Added dependency-version parsing and an alignment/security-baseline contract;
+  model-free coverage increased from 79 to 80 tests.
+- Promoted warnings to errors in the documented and hosted full test command.
+- Kept Keras at 3.10.0 after real artifact failures under every tested fixed
+  release, and documented the constraint in README, manifests, and AGENTS.md.
+
+**Verification evidence**
+
+- Process failure: an initial isolated audit defaulted to Python 3.14, where
+  Pillow 10.0.0 could not build and TensorFlow 2.19 had no distribution. Pinning
+  `uvx --python 3.12` produced valid results and is now the reusable method.
+- Test-first evidence: dependency policy failed on the missing Starlette pin
+  and stale versions before manifest updates.
+- First fresh environment: 80 tests passed but exposed Starlette's deprecated
+  `httpx` path. A second clean environment with `httpx2` passed 80 tests with
+  warnings treated as errors in 1.00s and had no broken requirements.
+- Existing environment: 80 tests passed with warnings treated as errors in
+  1.28s; compilation and CRLF-aware diff checks passed.
+- `requirements-test.txt`: 43 vulnerability records before, zero after.
+- `requirements-api.txt`: 59 records across four packages before, 17 Keras-only
+  records after; Pillow, multipart, and Starlette findings are eliminated.
+- `requirements.txt`: 79 records across nine packages before, 36 across five
+  after; the remaining 19 non-Keras tooling records are isolated for Cycle 26.
+- Real production smoke: the updated API stack with TensorFlow 2.19/Keras 3.10
+  loaded `best_car_model.keras` and validated `(None, 224, 224, 3)` input,
+  `(None, 196)` output, and the 196-class mapping.
+- Rejected candidates: Keras 3.11.3, 3.12.3, and 3.15.0 each failed both `.keras`
+  and H5 artifacts because a dense layer received two tensors; reverting to
+  3.10.0 restored successful loading.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 7/10 | 9/10 | Fresh and real-model paths prevent a security update from breaking inference |
+| Test coverage / verifiability | 7/10 | 10/10 | Exact pins, fresh installs, warnings-as-errors, audits, and real artifacts agree |
+| Maintainability | 6/10 | 9/10 | Shared audited pins and the Keras exception are explicit and executable |
+| Performance / resources | 8/10 | 8/10 | Runtime behavior is unchanged; audits/install smokes are development-only |
+| Security / safety | 3/10 | 8/10 | Test graph is clean and production findings are reduced to a constrained trusted-artifact dependency |
+
+**Lesson / process improvement:** Dependency resolution is not runtime
+compatibility. Match the audit interpreter to production, use fresh installs to
+surface deprecations, and require real artifact smoke tests for ML serialization
+libraries. When the fixed version breaks the model, preserve the working pin,
+document the exposure, and create a migration dependency instead of shipping a
+nominally clean but unusable service.
+
+**Next opportunity:** Upgrade and audit the remaining training-workspace tools
+(`requests`, `notebook`, `jupyterlab`, and `python-dotenv`) in an isolated Python
+3.12 environment, preserving notebook kernel startup and keeping the Keras
+compatibility constraint separate.

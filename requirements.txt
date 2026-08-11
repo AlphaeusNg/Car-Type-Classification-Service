@@ -1,9 +1,11 @@
 # Core dependencies - Verified from model_training_detailed.ipynb output
-# Compatible with Python 3.9-3.12 (tested with Python 3.12.3)
+# Compatible with Python 3.10-3.12 (tested with Python 3.12.3)
 tensorflow==2.19.0
 
 # TensorFlow ecosystem (exact versions from working environment)
 tensorboard==2.19.0
+# Newer Keras releases fail to deserialize the current ignored model artifacts.
+# Re-export and real-load verification are required before raising this pin.
 keras==3.10.0
 tensorboard-data-server==0.7.2
 
@@ -13,15 +15,15 @@ tensorboard-data-server==0.7.2
 # This version works on Linux, WSL2, and Windows natively
 
 # API dependencies (verified versions)
-fastapi==0.116.1
+fastapi==0.139.2
 uvicorn==0.35.0
-python-multipart==0.0.6
-starlette==0.47.2
+python-multipart==0.0.32
+starlette==1.6.0
 pydantic==2.11.7
 pydantic_core==2.33.2
 
 # Image processing
-Pillow==10.0.0
+Pillow==12.3.0
 
 # Data science and ML (exact working versions)
 numpy==1.26.4
@@ -50,5 +52,5 @@ python-dotenv==1.0.0
 tqdm==4.67.1
 
 # Development and testing
-pytest==7.4.2
+pytest==9.1.1
 pytest-asyncio==0.21.1

@@ -23,7 +23,9 @@ def test_ci_workflow_policy():
     assert "cache-dependency-path: requirements-test.txt" in WORKFLOW
     assert "python -m pip install -r requirements-test.txt" in WORKFLOW
     assert "python -m pytest -q tests/test_workflow.py" in WORKFLOW
-    assert re.search(r"run:\s*python -m pytest -q\s*$", WORKFLOW, re.MULTILINE)
+    assert re.search(
+        r"run:\s*python -m pytest -q -W error\s*$", WORKFLOW, re.MULTILINE
+    )
     assert "python -m pip check" in WORKFLOW
     assert (
         "python -m compileall -q api tests run.py prediction_example.py" in WORKFLOW

@@ -1,9 +1,11 @@
 # Production inference dependencies only. Training/notebook tooling stays in
 # requirements.txt.
 tensorflow==2.19.0
+# Newer Keras releases fail to deserialize the current ignored model artifacts.
 keras==3.10.0
-fastapi==0.116.1
+fastapi==0.139.2
+starlette==1.6.0
 uvicorn==0.35.0
-python-multipart==0.0.6
-Pillow==10.0.0
+python-multipart==0.0.32
+Pillow==12.3.0
 numpy==1.26.4

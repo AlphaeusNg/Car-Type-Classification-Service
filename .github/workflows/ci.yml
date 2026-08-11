@@ -28,7 +28,7 @@ jobs:
       - name: Workflow policy
         run: python -m pytest -q tests/test_workflow.py
       - name: API and runner tests
-        run: python -m pytest -q
+        run: python -m pytest -q -W error
       - name: Dependency consistency
         run: python -m pip check
       - name: Python syntax

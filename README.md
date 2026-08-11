@@ -63,7 +63,7 @@ That's it! API runs at **http://localhost:8000** 🎉
 ### Run tests
 
 ```bash
-python3 -m pytest -q
+python3 -m pytest -q -W error
 python3 -m pip check
 python3 -m compileall -q api tests run.py prediction_example.py
 ```
@@ -80,6 +80,13 @@ Dependency manifests are intentionally scoped:
 - `requirements-api.txt`: production API/Docker inference only.
 - `requirements-test.txt`: fast model-free contract tests and CI.
 - `requirements.txt`: complete training, notebook, analysis, and API workspace.
+
+The lightweight test dependency graph currently audits with no known
+vulnerabilities. Keras remains pinned to 3.10.0 because the real `.keras` and H5
+artifacts fail to deserialize under 3.11.3, 3.12.3, and 3.15.0. Load only trusted
+model artifacts; re-export and a real readiness smoke are required before that
+pin can be raised. The current audit status and remaining advisories are tracked
+in `PROGRESS.md`.
 
 `run.py` and the Docker build accept the same model formats as the API loader:
 `best_car_model.keras`, `car_classification_model.h5`, or

@@ -29,6 +29,9 @@ data/train  data/test  # Stanford Cars images (large)
 ## Runtime notes
 
 - Python **3.12+** recommended; TensorFlow ~2.19 in project history.
+- The current model artifacts require Keras 3.10.0; 3.11.3, 3.12.3, and
+  3.15.0 fail real deserialization. Run a real artifact load/readiness smoke
+  before changing this pin.
 - Models and `data/` are heavy — don’t casually reformat or re-upload huge assets.
 - Prefer API changes in `api/` with small utilities; keep training experiments in notebooks unless promoting a new saved model.
 
