@@ -7,16 +7,19 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 21: 68 model-free tests cover the API boundary,
+- Baseline after Cycle 22: 72 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
-  lightweight import, and model artifact discovery/build command; GitHub
-  Actions runs them without TensorFlow or trained weights.
+  decoded-image policy, lightweight import, and model artifact discovery/build
+  command; GitHub Actions runs them without TensorFlow or trained weights.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Verify decoded image format instead of trusting MIME alone | Correctness / security | Medium: renamed unsupported formats currently pass the JPEG/PNG header check | Small / low | Inspect Pillow `image.format` after open | Next |
+| 1 | Validate model output rank and batch metadata at startup | Correctness / reliability | High: rank-three or fixed multi-row outputs can report ready then fail every request | Small / low | Extend shared artifact validation; runtime decoder already requires `(1, classes)` | Next |
+| 2 | Audit and refresh stale media/upload dependency pins | Security / maintenance | Medium-high: Pillow 10.0.0 and python-multipart 0.0.6 require evidence-based review | Medium / medium | Run a vulnerability audit and compatibility tests before changing pins | Backlog |
+| 3 | Modernize and policy-test GitHub Actions | Process / observability | Medium: workflow still uses checkout v4/setup-python v5 and has no timeout, permissions, or policy contracts | Small-medium / low | Mirror the bounded CI patterns proven in sibling repos | Backlog |
+| — | Verify decoded image format instead of trusting MIME alone | Correctness / security | Medium: renamed unsupported formats passed the JPEG/PNG header check | Small / low | Real GIF/WebP fixtures at utility and endpoint boundaries | Completed in Cycle 22 |
 | — | Apply JPEG EXIF orientation before resize | Correctness / UX | Medium-high: phone photos were classified sideways despite valid pixels | Small / low | Asymmetric orientation-6 JPEG | Completed in Cycle 21 |
 | — | Validate model input shape against preprocessing | Correctness / reliability | High: an incompatible artifact passed readiness then failed every request | Small / low | Shared `(1, 224, 224, 3)` contract | Completed in Cycle 20 |
 | — | Validate prediction tensor shape and finite scores | Correctness / robustness | High: malformed model output produced misleading rankings or generic indexing failures | Small / low | Pure decoder plus fake outputs | Completed in Cycle 19 |
@@ -835,3 +838,58 @@ pixel placement rather than merely output shape.
 **Next opportunity:** Inspect Pillow's decoded `image.format` and reject
 anything except JPEG/PNG even when a client supplies an allowed MIME header,
 with renamed WebP/GIF fixtures at the utility and endpoint boundaries.
+
+### Cycle 22 — Enforce decoded image formats (2026-08-11)
+
+**Why this won:** The HTTP boundary allowed only JPEG/PNG MIME claims, but
+Pillow decoded any installed image format. Genuine GIF or WebP bytes renamed
+and uploaded as an allowed type therefore reached model inference despite the
+documented contract.
+
+**Plan and success criteria**
+
+1. Use real in-memory GIF and WebP payloads rather than signature stubs.
+2. Reject unsupported formats immediately after Pillow identifies them and
+   before EXIF, color conversion, resize, or NumPy allocation.
+3. Keep the endpoint's existing generic client error and preserve valid
+   JPEG/PNG behavior.
+4. Pass the full model-free gate without TensorFlow or trained weights.
+
+**Changes**
+
+- Added an explicit `JPEG`/`PNG` decoded-format allowlist at the preprocessing
+  boundary.
+- Added two utility regressions proving GIF and WebP bytes fail closed.
+- Added two endpoint regressions proving allowed MIME claims cannot disguise
+  either payload and decoder details remain behind the generic HTTP 400.
+- Documented that both upload MIME and decoded file format are enforced.
+
+**Verification evidence**
+
+- Test-first evidence: all four new cases failed; preprocessing accepted both
+  formats and the disguised endpoint uploads returned HTTP 200.
+- Focused red/green run: 4 passed after the format boundary was added.
+- `.venv/bin/python -m pytest -q`: 72 passed in 1.48s (up from 68).
+- `.venv/bin/python -m compileall -q api tests run.py prediction_example.py`:
+  passed.
+- `.venv/bin/python -m pip check`: no broken requirements found.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 6/10 | 9/10 | Implementation now matches the documented JPEG/PNG input contract |
+| Test coverage / verifiability | 6/10 | 10/10 | Real encoded fixtures exercise both utility and HTTP boundaries |
+| Maintainability | 8/10 | 9/10 | One named decoded-format policy sits beside decode resource policy |
+| Performance / resources | 8/10 | 9/10 | Unsupported formats stop before pixel transforms and array allocation |
+| Security / robustness | 6/10 | 9/10 | Client-controlled MIME metadata can no longer widen accepted formats |
+
+**Lesson / process improvement:** Validate media claims at two independent
+boundaries: transport metadata controls early rejection, while decoder-derived
+metadata enforces the actual file contract. Real alternate-format fixtures
+prove the complete path more reliably than handcrafted magic bytes.
+
+**Next opportunity:** Require startup model output metadata to describe exactly
+one rank-two score row per preprocessed image, so rank-three or fixed multi-row
+artifacts fail before readiness rather than on every prediction.

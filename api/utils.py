@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 MAX_DECODED_PIXELS = 50_000_000
 PREPROCESSED_IMAGE_SHAPE = (1, 224, 224, 3)
+ALLOWED_DECODED_IMAGE_FORMATS = frozenset({"JPEG", "PNG"})
 
 
 def validate_image_dimensions(size, max_pixels=MAX_DECODED_PIXELS):
@@ -82,6 +83,8 @@ def preprocess_image(image_data: bytes) -> np.ndarray:
     try:
         # Load image from bytes
         image = Image.open(io.BytesIO(image_data))
+        if image.format not in ALLOWED_DECODED_IMAGE_FORMATS:
+            raise ValueError("Decoded image format must be JPEG or PNG")
         validate_image_dimensions(image.size)
         image = ImageOps.exif_transpose(image)
 

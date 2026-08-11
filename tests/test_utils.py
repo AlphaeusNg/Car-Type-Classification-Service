@@ -77,6 +77,15 @@ def test_preprocess_image_matches_shared_model_input_shape():
     assert preprocess_image(encoded.getvalue()).shape == PREPROCESSED_IMAGE_SHAPE
 
 
+@pytest.mark.parametrize("decoded_format", ["GIF", "WEBP"])
+def test_preprocess_image_rejects_unsupported_decoded_format(decoded_format):
+    encoded = BytesIO()
+    Image.new("RGB", (32, 16), "red").save(encoded, format=decoded_format)
+
+    with pytest.raises(ValueError, match="JPEG or PNG"):
+        preprocess_image(encoded.getvalue())
+
+
 def test_preprocess_image_applies_exif_orientation_before_resize():
     source = Image.new("RGB", (40, 20), "red")
     source.paste("blue", (20, 0, 40, 20))

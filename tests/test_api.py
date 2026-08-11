@@ -1,8 +1,12 @@
+from io import BytesIO
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 import api.main as api
+from api.utils import preprocess_image
 
 
 class FakeModel:
@@ -174,6 +178,27 @@ def test_predict_rejects_unsupported_media_type(client, monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "File must be a JPEG or PNG image"
+
+
+@pytest.mark.parametrize(
+    ("decoded_format", "claimed_content_type"),
+    [("GIF", "image/jpeg"), ("WEBP", "image/png")],
+)
+def test_predict_rejects_unsupported_decoded_format(
+    client, monkeypatch, decoded_format, claimed_content_type
+):
+    make_ready(monkeypatch)
+    monkeypatch.setattr(api, "preprocess_image", preprocess_image)
+    encoded = BytesIO()
+    Image.new("RGB", (32, 16), "red").save(encoded, format=decoded_format)
+
+    response = client.post(
+        "/predict",
+        files={"image": ("renamed-image", encoded.getvalue(), claimed_content_type)},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid image data"
 
 
 def test_predict_rejects_oversized_upload_without_preprocessing(client, monkeypatch):
