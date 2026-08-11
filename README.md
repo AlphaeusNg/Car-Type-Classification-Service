@@ -136,12 +136,18 @@ non-empty, finite numeric score row whose width matches `class_mapping.json`.
 Invalid model output is logged server-side and returned as the generic
 `Prediction failed` response.
 Image preprocessing and TensorFlow prediction run in worker threads so a slow
-inference does not block readiness traffic. Each service process admits one
-model prediction at a time; additional prediction requests wait asynchronously
-for that lane for up to five seconds. A request that cannot acquire the lane
-receives HTTP 503 with `Retry-After: 5`. An inference that already owns the lane
-is never timed out or abandoned, preserving exclusive access to the shared
-Keras model.
+inference does not block readiness traffic. Each service process admits at most
+two concurrent JPEG/PNG decode-and-resize workers; an image that cannot acquire
+one of those lanes within one second receives HTTP 503 with `Retry-After: 1`.
+Acquired image workers are allowed to finish and always release their lane,
+including for invalid images. This bounds concurrent full-image pixel buffers
+without treating a thread timeout as cancellation.
+
+Each service process separately admits one model prediction at a time;
+additional prediction requests wait asynchronously for that lane for up to five
+seconds. A request that cannot acquire the model lane receives HTTP 503 with
+`Retry-After: 5`. An inference that already owns the lane is never timed out or
+abandoned, preserving exclusive access to the shared Keras model.
 The decoded file format must also be JPEG or PNG; renaming another image type or
 changing only its upload MIME type is rejected. JPEG orientation metadata is
 applied before resize, so phone photos reach the model in their displayed

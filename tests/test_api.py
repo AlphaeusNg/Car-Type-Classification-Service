@@ -62,6 +62,31 @@ class BlockingModel(FakeModel):
                 self.active_predictions -= 1
 
 
+class BlockingPreprocessor:
+    def __init__(self, expected_concurrency):
+        self.expected_concurrency = expected_concurrency
+        self.expected_calls_started = Event()
+        self.release_calls = Event()
+        self._state_lock = Lock()
+        self.active_calls = 0
+        self.max_active_calls = 0
+
+    def __call__(self, _image_data):
+        with self._state_lock:
+            self.active_calls += 1
+            self.max_active_calls = max(self.max_active_calls, self.active_calls)
+            if self.active_calls == self.expected_concurrency:
+                self.expected_calls_started.set()
+
+        try:
+            if not self.release_calls.wait(timeout=5):
+                raise TimeoutError("test preprocessing was not released")
+            return np.zeros((1, 224, 224, 3), dtype=np.float32)
+        finally:
+            with self._state_lock:
+                self.active_calls -= 1
+
+
 @pytest.fixture(autouse=True)
 def reset_runtime(monkeypatch):
     monkeypatch.setattr(api, "model", None)
@@ -309,6 +334,34 @@ def test_predict_rejects_invalid_image_without_exposing_decoder_error(client, mo
     assert "decoder internals" not in response.text
 
 
+def test_invalid_images_release_image_processing_capacity(monkeypatch):
+    loaded_model = FakeModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    calls = 0
+
+    def reject_twice_then_accept(_data):
+        nonlocal calls
+        calls += 1
+        if calls <= 2:
+            raise ValueError("invalid test image")
+        return np.zeros((1, 224, 224, 3), dtype=np.float32)
+
+    monkeypatch.setattr(api, "load_model", lambda: loaded_model)
+    monkeypatch.setattr(api, "load_class_mapping", mapping)
+    monkeypatch.setattr(api, "preprocess_image", reject_twice_then_accept)
+    monkeypatch.setattr(api, "IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS", 0.05)
+
+    with TestClient(api.app) as lifecycle_client:
+        responses = [
+            lifecycle_client.post(
+                "/predict",
+                files={"image": ("car.png", b"image", "image/png")},
+            )
+            for _ in range(3)
+        ]
+
+    assert [response.status_code for response in responses] == [400, 400, 200]
+
+
 def test_predict_returns_ranked_classes(client, monkeypatch):
     make_ready(monkeypatch)
 
@@ -411,6 +464,49 @@ def test_predict_bounds_queue_wait_without_abandoning_active_inference(monkeypat
     assert first_response.status_code == 200
     assert recovered_response.status_code == 200
     assert loaded_model.max_active_predictions == 1
+
+
+def test_predict_bounds_image_processing_concurrency_and_recovers(monkeypatch):
+    loaded_model = FakeModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    blocking_preprocessor = BlockingPreprocessor(expected_concurrency=2)
+    monkeypatch.setattr(api, "load_model", lambda: loaded_model)
+    monkeypatch.setattr(api, "load_class_mapping", mapping)
+    monkeypatch.setattr(api, "preprocess_image", blocking_preprocessor)
+    monkeypatch.setattr(api, "IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS", 0.05)
+
+    def request_prediction(lifecycle_client):
+        return lifecycle_client.post(
+            "/predict",
+            files={"image": ("car.png", b"image", "image/png")},
+        )
+
+    with TestClient(api.app) as lifecycle_client:
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            first = executor.submit(request_prediction, lifecycle_client)
+            second = executor.submit(request_prediction, lifecycle_client)
+            assert blocking_preprocessor.expected_calls_started.wait(timeout=1)
+            overloaded = executor.submit(request_prediction, lifecycle_client)
+            health = executor.submit(lifecycle_client.get, "/health")
+
+            try:
+                overloaded_response = overloaded.result(timeout=1)
+                health_while_blocked = health.result(timeout=1)
+            finally:
+                blocking_preprocessor.release_calls.set()
+
+            active_responses = [first.result(timeout=2), second.result(timeout=2)]
+
+        recovered_response = request_prediction(lifecycle_client)
+
+    assert overloaded_response.status_code == 503
+    assert overloaded_response.json() == {
+        "detail": "Image processing queue is busy; retry later"
+    }
+    assert overloaded_response.headers["retry-after"] == "1"
+    assert health_while_blocked.status_code == 200
+    assert all(response.status_code == 200 for response in active_responses)
+    assert recovered_response.status_code == 200
+    assert blocking_preprocessor.max_active_calls == 2
 
 
 def test_predict_rejects_non_finite_model_output_without_exposing_details(

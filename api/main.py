@@ -46,9 +46,13 @@ model = None
 class_mapping = None
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_CONCURRENT_IMAGE_PROCESSING = 2
+IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS = 1.0
+IMAGE_PROCESSING_RETRY_AFTER_SECONDS = 1
 MAX_CONCURRENT_PREDICTIONS = 1
 PREDICTION_QUEUE_TIMEOUT_SECONDS = 5.0
 PREDICTION_RETRY_AFTER_SECONDS = 5
+image_processing_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGE_PROCESSING)
 prediction_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PREDICTIONS)
 
 
@@ -114,7 +118,7 @@ def validate_runtime_artifacts(loaded_model, loaded_mapping):
 @asynccontextmanager
 async def lifespan(_app):
     """Load inference dependencies before serving requests."""
-    global model, class_mapping, prediction_semaphore
+    global model, class_mapping, image_processing_semaphore, prediction_semaphore
     model = None
     class_mapping = None
 
@@ -125,6 +129,9 @@ async def lifespan(_app):
         validate_runtime_artifacts(loaded_model, loaded_mapping)
         model = loaded_model
         class_mapping = loaded_mapping
+        image_processing_semaphore = asyncio.Semaphore(
+            MAX_CONCURRENT_IMAGE_PROCESSING
+        )
         prediction_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PREDICTIONS)
         logger.info("✅ Model and class mapping loaded successfully!")
     except Exception as e:
@@ -187,10 +194,29 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
         raise HTTPException(status_code=413, detail="Image exceeds the 10 MB upload limit")
 
     try:
+        await asyncio.wait_for(
+            image_processing_semaphore.acquire(),
+            timeout=IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS,
+        )
+    except TimeoutError as exc:
+        logger.warning(
+            "Image processing queue wait exceeded %.1f seconds",
+            IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Image processing queue is busy; retry later",
+            headers={"Retry-After": str(IMAGE_PROCESSING_RETRY_AFTER_SECONDS)},
+        ) from exc
+
+    try:
+        # Do not time out this worker: threadpool work cannot be abandoned safely.
         processed_image = await run_in_threadpool(preprocess_image, image_data)
     except ValueError as exc:
         logger.warning("Rejected invalid image upload: %s", exc)
         raise HTTPException(status_code=400, detail="Invalid image data") from exc
+    finally:
+        image_processing_semaphore.release()
 
     try:
         await asyncio.wait_for(

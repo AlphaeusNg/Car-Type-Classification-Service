@@ -7,13 +7,15 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 29: 96 model-free tests cover the API boundary,
+- Baseline after Cycle 30: 98 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   exact class-mapping metadata, decoded-image policy, lightweight import, and
   model artifact discovery/build command. Request-level concurrency coverage
   proves slow synchronous inference stays off the event loop and shared model
   access is serialized; callers wait at most five seconds for the model lane
-  before receiving explicit retryable overload behavior. Nineteen CI policy
+  before receiving explicit retryable overload behavior. Image preprocessing is
+  independently limited to two workers with a one-second queue bound, recovery
+  after invalid input, and explicit retry semantics. Nineteen CI policy
   assertions keep the complete lightweight gate on supported action runtimes
   without TensorFlow or trained weights.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
@@ -24,8 +26,8 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Bound pre-inference image-work concurrency | Security / resources | Medium-high: image decode/resize runs before model-lane admission, so bursts can still occupy many worker threads and large decoded buffers | Medium / medium | Measure worker/memory behavior and preserve prompt rejection of invalid uploads | Backlog |
-| 2 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Bound pre-inference image-work concurrency | Security / resources | Medium-high: image decode/resize ran before model-lane admission, so bursts could occupy many worker threads and large decoded buffers | Medium / medium | Synchronized request coverage proves a two-worker ceiling, prompt overload, invalid-image recovery, and responsive health | Completed in Cycle 30 |
 | — | Bound inference queue wait with explicit overload behavior | Reliability / resources | Medium-high: model calls were serialized, but callers could wait indefinitely behind a stalled prediction | Medium / medium | Synchronized overload test proves timeout, active-work completion, lane recovery, and exclusive access | Completed in Cycle 29 |
 | — | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction ran directly inside an async route with no admission control | Medium / medium | Synchronized request test proves responsive health and one active model call | Completed in Cycle 28 |
 | — | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permitted extra reverse entries and weak label/index types | Small / low | Thirteen pure and runtime fixtures cover the exact typed inverse contract | Completed in Cycle 27 |
@@ -1355,3 +1357,78 @@ bounded waiting from abandoned execution or leaked capacity.
 it currently occurs before model-lane admission and can occupy multiple worker
 threads and large decoded buffers during an upload burst. At workspace scope,
 rotate to the portfolio repository before returning here.
+
+### Cycle 30 — Bound image preprocessing concurrency (2026-08-11)
+
+**Why this won:** Upload byte size and decoded dimensions were bounded, but
+every accepted request could still enter Pillow/NumPy preprocessing before the
+single-model lane. A burst could therefore allocate large decoded buffers up to
+the framework worker-pool limit even though only one result could reach the
+model at a time.
+
+**Plan and success criteria**
+
+1. Reproduce concurrent preprocessing with synchronized request workers.
+2. Admit at most two decode/resize workers and bound only lane acquisition.
+3. Return stable retryable overload behavior while keeping readiness responsive.
+4. Prove invalid images release capacity, active workers complete, and the lane
+   remains reusable.
+5. Run the real 196-class artifact through the HTTP route and keep the complete
+   warning-strict lightweight gate green.
+
+**Changes**
+
+- Added a two-token image-processing semaphore, recreated on each successful
+  application lifespan independently of the one-token model semaphore.
+- Bounded preprocessing-lane acquisition to one second and return HTTP 503 with
+  `Retry-After: 1` when saturated.
+- Kept acquired worker calls untimed and release capacity in `finally`, including
+  after invalid-image failures, because a timed-out Python await cannot safely
+  stop an already-running Pillow worker.
+- Added synchronized burst coverage for the two-worker ceiling, overload,
+  health responsiveness, successful active requests, and post-overload recovery.
+- Added a repeated-invalid-image regression proving both slots are returned
+  before a subsequent valid prediction.
+- Documented the independent preprocessing and inference admission contracts.
+
+**Verification evidence**
+
+- Test-first evidence: the synchronized contract failed because the previous
+  module exposed no image-processing admission or timeout policy.
+- Focused concurrency and invalid-input pair passed three consecutive runs
+  (six checks total); peak preprocessing concurrency was exactly two, the third
+  request received the documented 503, and health returned before workers were
+  released.
+- `.venv/bin/python -m pytest -q -W error`: 98 passed in 1.26s (up from 96).
+- `.venv/bin/python -m pip check`: no broken requirements found; compilation and
+  CRLF-aware whitespace validation passed.
+- The 50,000,000-pixel ceiling implies about 143 MiB for one RGB pixel payload;
+  the explicit two-worker policy caps simultaneous payloads at about 286 MiB
+  rather than inheriting a potentially much larger framework pool. This is a
+  pixel-payload bound, not a total-process-RSS guarantee.
+- Real GPU artifact smoke loaded 196 classes and completed `/predict` through
+  application lifespan with HTTP 200 (`Dodge Challenger SRT8 2011`, confidence
+  `0.871453`).
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 7/10 | 9/10 | Saturation, completion, failure release, and recovery have explicit contracts |
+| Test coverage / verifiability | 8/10 | 10/10 | Synchronized request tests measure the actual worker ceiling and queue behavior |
+| Maintainability | 8/10 | 9/10 | Preprocessing and inference each have named, independent capacity policies |
+| Performance / resources | 4/10 | 9/10 | Concurrent full-image work is capped at two rather than framework pool size |
+| Security / robustness | 6/10 | 9/10 | Decode bursts fail closed before multiplying large pixel buffers |
+| Developer / user experience | 7/10 | 9/10 | Saturated clients receive deterministic retry guidance and health remains responsive |
+
+**Lesson / process improvement:** Resource limits should be placed immediately
+around the costly allocation they govern, not inherited indirectly from a later
+model lock or a framework default. Time out only semaphore acquisition; once a
+thread starts, wait for it and release capacity in `finally`. Quantify memory
+claims as payload bounds and avoid presenting them as total RSS measurements.
+
+**Next opportunity:** Locally, the remaining high-impact item is a trusted model
+re-export to remove the Keras 3.10 advisory constraint, but it requires
+prediction-equivalence evidence and should not be attempted as a casual pin
+change. At workspace scope, rotate to the portfolio repository before returning
+here, avoiding diminishing returns in the same service.
