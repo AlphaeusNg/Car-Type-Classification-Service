@@ -21,6 +21,7 @@ try:
         load_class_mapping,
         load_model,
         preprocess_image,
+        validate_class_mapping,
     )
 except ImportError:
     # Fallback for when running from api directory
@@ -30,6 +31,7 @@ except ImportError:
         load_class_mapping,
         load_model,
         preprocess_image,
+        validate_class_mapping,
     )
 
 # Setup logging
@@ -45,15 +47,8 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 def validate_runtime_artifacts(loaded_model, loaded_mapping):
     """Reject incompatible model and class-mapping artifacts at startup."""
-    if not isinstance(loaded_mapping, dict):
-        raise ValueError("class mapping must be an object")
-
-    index_to_class = loaded_mapping.get("index_to_class")
-    class_to_index = loaded_mapping.get("class_to_index")
-    if not isinstance(index_to_class, dict) or not index_to_class:
-        raise ValueError("index_to_class must be a non-empty object")
-    if not isinstance(class_to_index, dict):
-        raise ValueError("class_to_index must be an object")
+    validate_class_mapping(loaded_mapping)
+    index_to_class = loaded_mapping["index_to_class"]
 
     input_shape = getattr(loaded_model, "input_shape", None)
     if not isinstance(input_shape, (tuple, list)) or not input_shape:
@@ -101,12 +96,6 @@ def validate_runtime_artifacts(loaded_model, loaded_mapping):
 
     if len(index_to_class) != output_width:
         raise ValueError("model output width does not match class mapping")
-    expected_keys = {str(index) for index in range(output_width)}
-    if set(index_to_class) != expected_keys:
-        raise ValueError("index_to_class keys must be contiguous model output indices")
-    for index, label in index_to_class.items():
-        if class_to_index.get(label) != int(index):
-            raise ValueError("class_to_index must be the inverse of index_to_class")
 
 
 @asynccontextmanager

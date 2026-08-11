@@ -168,12 +168,39 @@ def load_model(project_root: Path | None = None, model_loader=None) -> tf.keras.
     )
 
 def validate_class_mapping(class_mapping: Any) -> Dict[str, Any]:
-    """Validate the minimum persisted mapping structure."""
+    """Validate an exact, type-strict class-index bijection."""
     required_keys = ["index_to_class", "class_to_index"]
     if not isinstance(class_mapping, dict) or not all(
         key in class_mapping for key in required_keys
     ):
         raise ValueError(f"Invalid mapping format. Required keys: {required_keys}")
+
+    index_to_class = class_mapping["index_to_class"]
+    class_to_index = class_mapping["class_to_index"]
+    if not isinstance(index_to_class, dict) or not index_to_class:
+        raise ValueError("index_to_class must be a non-empty object")
+    if not isinstance(class_to_index, dict):
+        raise ValueError("class_to_index must be an object")
+
+    expected_indices = {str(index) for index in range(len(index_to_class))}
+    if set(index_to_class) != expected_indices:
+        raise ValueError("index_to_class keys must be contiguous string indices")
+
+    labels = list(index_to_class.values())
+    if any(not isinstance(label, str) or not label.strip() for label in labels):
+        raise ValueError("index_to_class labels must be non-empty strings")
+    if len(set(labels)) != len(labels):
+        raise ValueError("index_to_class labels must be unique")
+    if set(class_to_index) != set(labels):
+        raise ValueError(
+            "class_to_index keys must exactly match index_to_class labels"
+        )
+    if any(type(index) is not int for index in class_to_index.values()):
+        raise ValueError("class_to_index values must be integers")
+    for index, label in index_to_class.items():
+        if class_to_index[label] != int(index):
+            raise ValueError("class_to_index must be the inverse of index_to_class")
+
     return class_mapping
 
 

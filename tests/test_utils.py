@@ -12,6 +12,7 @@ from api.utils import (
     load_class_mapping,
     load_model,
     preprocess_image,
+    validate_class_mapping,
     validate_image_dimensions,
 )
 
@@ -117,6 +118,50 @@ def test_load_class_mapping_returns_valid_mapping(tmp_path):
     path.write_text(json.dumps(expected), encoding="utf-8")
 
     assert load_class_mapping(path) == expected
+
+
+@pytest.mark.parametrize(
+    ("invalid_mapping", "message"),
+    [
+        ({"index_to_class": {}, "class_to_index": {}}, "non-empty"),
+        ({"index_to_class": [], "class_to_index": {}}, "index_to_class"),
+        ({"index_to_class": {"0": "coupe"}, "class_to_index": []}, "class_to_index"),
+        (
+            {
+                "index_to_class": {"0": "coupe", "2": "sedan"},
+                "class_to_index": {"coupe": 0, "sedan": 2},
+            },
+            "contiguous",
+        ),
+        ({"index_to_class": {"0": 7}, "class_to_index": {7: 0}}, "non-empty strings"),
+        ({"index_to_class": {"0": " "}, "class_to_index": {" ": 0}}, "non-empty strings"),
+        (
+            {
+                "index_to_class": {"0": "coupe", "1": "coupe"},
+                "class_to_index": {"coupe": 0},
+            },
+            "unique",
+        ),
+        (
+            {
+                "index_to_class": {"0": "coupe"},
+                "class_to_index": {"coupe": 0, "sedan": 1},
+            },
+            "exactly",
+        ),
+        (
+            {"index_to_class": {"0": "coupe"}, "class_to_index": {"coupe": False}},
+            "integers",
+        ),
+        (
+            {"index_to_class": {"0": "coupe"}, "class_to_index": {"coupe": 0.0}},
+            "integers",
+        ),
+    ],
+)
+def test_validate_class_mapping_requires_typed_bijection(invalid_mapping, message):
+    with pytest.raises(ValueError, match=message):
+        validate_class_mapping(invalid_mapping)
 
 
 def test_load_class_mapping_reports_invalid_json_as_value_error(tmp_path):

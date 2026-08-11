@@ -171,6 +171,31 @@ def test_runtime_artifacts_reject_non_inverse_mapping():
         api.validate_runtime_artifacts(FakeModel([0.05, 0.1, 0.6, 0.15, 0.1]), invalid_mapping)
 
 
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda value: value["class_to_index"].update({"extra": 5}), "exactly"),
+        (
+            lambda value: (
+                value["index_to_class"].__setitem__("0", 7),
+                value["class_to_index"].pop("class-0"),
+                value["class_to_index"].__setitem__(7, 0),
+            ),
+            "non-empty strings",
+        ),
+        (lambda value: value["class_to_index"].__setitem__("class-0", False), "integers"),
+    ],
+)
+def test_runtime_artifacts_reject_non_bijective_mapping(mutate, message):
+    invalid_mapping = mapping()
+    mutate(invalid_mapping)
+
+    with pytest.raises(ValueError, match=message):
+        api.validate_runtime_artifacts(
+            FakeModel([0.05, 0.1, 0.6, 0.15, 0.1]), invalid_mapping
+        )
+
+
 def test_lifespan_does_not_publish_incompatible_artifacts(monkeypatch):
     monkeypatch.setattr(api, "load_model", lambda: FakeModel([0.2, 0.3, 0.5]))
     monkeypatch.setattr(api, "load_class_mapping", lambda: mapping(5))

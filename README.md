@@ -112,7 +112,9 @@ curl -X POST "http://localhost:8000/predict" \
 
 `/health` is a readiness check: it returns HTTP 503 until both the model and
 class mapping are loaded, input/output shapes match preprocessing and class
-labels, and then returns HTTP 200 with `"status": "healthy"`.
+labels, and then returns HTTP 200 with `"status": "healthy"`. The persisted
+mapping must contain contiguous string indices and unique, non-blank labels;
+`class_to_index` must be the exact integer-valued inverse with no extra entries.
 
 ### Response Format
 ```json

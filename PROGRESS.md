@@ -7,11 +7,12 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 26: 81 model-free tests cover the API boundary,
+- Baseline after Cycle 27: 94 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
-  decoded-image policy, lightweight import, and model artifact discovery/build
-  command; 19 CI policy assertions keep the complete lightweight gate on
-  supported action runtimes without TensorFlow or trained weights.
+  exact class-mapping metadata, decoded-image policy, lightweight import, and
+  model artifact discovery/build command; 19 CI policy assertions keep the
+  complete lightweight gate on supported action runtimes without TensorFlow or
+  trained weights.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
   production resolution has 17 Keras-only findings constrained by real model
   compatibility; the full training workspace now has the same Keras-only set.
@@ -20,9 +21,9 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permits extra reverse entries and weak label types | Small / low | Extend pure mapping fixtures and runtime artifact contracts | Next |
+| 1 | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction currently runs directly inside an async route with no admission control | Medium / medium-high | Requires a model-safe concurrency policy and request-level timing tests | Backlog |
 | 2 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
-| 3 | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction currently runs directly inside an async route with no admission control | Medium / medium-high | Requires a model-safe concurrency policy and request-level timing tests | Backlog |
+| — | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permitted extra reverse entries and weak label/index types | Small / low | Thirteen pure and runtime fixtures cover the exact typed inverse contract | Completed in Cycle 27 |
 | — | Clear non-Keras training-workspace audit findings | Security / maintenance | Medium-high: requests, notebook, JupyterLab, and python-dotenv retained 19 advisory records | Medium / medium | Fresh full install, tool imports, entry points, kernel execution, and audit isolate Keras as the only remaining exposure | Completed in Cycle 26 |
 | — | Audit and refresh deploy/test dependency pins | Security / maintenance | High: test and production resolution initially exposed 43 and 59 advisory records | Medium / medium | Fresh Python 3.12 tests, audits, and real model load separated safe upgrades from breaking Keras releases | Completed in Cycle 25 |
 | — | Modernize and policy-test GitHub Actions | Process / observability | Medium: hosted CI passed with Node 20 deprecation annotations and lacked timeout, permissions, or policy contracts | Small-medium / low | Nineteen policy assertions enforce the bounded v7 workflow | Completed in Cycle 24 |
@@ -1154,3 +1155,65 @@ kernel; version commands alone do not prove the kernel path works.
 startup. At workspace scope, rotate to another repository before returning to
 this service, avoiding diminishing returns after five consecutive car-service
 cycles.
+
+### Cycle 27 — Require an exact typed class mapping (2026-08-11)
+
+**Why this won:** Startup verified required mapping keys, output width,
+contiguous forward indices, and the pairs it happened to visit, but it still
+accepted extra reverse entries and labels or reverse indices with weak types.
+Python equality made this especially subtle: `False == 0` and `0.0 == 0` let
+invalid JSON-like metadata masquerade as an integer inverse.
+
+**Plan and success criteria**
+
+1. Specify the full persisted mapping contract with failing utility and
+   readiness fixtures.
+2. Enforce one shared exact bijection at both file-load and runtime-artifact
+   boundaries without duplicating policy.
+3. Keep the complete warning-strict model-free suite, dependency graph,
+   compilation, and whitespace checks green.
+
+**Changes**
+
+- Expanded `validate_class_mapping` to require a non-empty object with
+  contiguous string indices, unique non-blank string labels, identical reverse
+  keys, strict integer reverse values, and exact inverse pairs.
+- Reused that validator in `validate_runtime_artifacts` and removed its weaker,
+  duplicated mapping checks; model shape/width compatibility remains local to
+  the runtime boundary.
+- Added ten pure mapping cases and three runtime-artifact cases for malformed
+  containers, sparse indices, label types, blanks, duplicates, extra entries,
+  booleans, and floats.
+- Documented the readiness mapping contract in the API README.
+
+**Verification evidence**
+
+- Test-first evidence: all 13 new malformed-mapping cases failed against the
+  prior validators because no `ValueError` was raised.
+- Focused regression: 14 mapping-format/inverse tests passed after the change.
+- `.venv/bin/python -m pytest -q -W error`: 94 passed in 1.32s (up from 81).
+- `.venv/bin/python -m pip check`: no broken requirements found.
+- `.venv/bin/python -m compileall -q api tests run.py prediction_example.py`:
+  passed.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 6/10 | 10/10 | Every mapping accepted at load is now a typed bijection accepted at readiness |
+| Test coverage / verifiability | 8/10 | 10/10 | Thirteen adversarial fixtures cover both validation boundaries |
+| Maintainability | 7/10 | 9/10 | One pure helper owns mapping metadata policy |
+| Performance / resources | 9/10 | 9/10 | Linear validation remains startup-only over 196 entries |
+| Security / robustness | 7/10 | 9/10 | Extra and coercion-like metadata can no longer enter inference state |
+
+**Lesson / process improvement:** Validate inverse metadata as an exact key-set
+relationship before checking individual pairs, and use exact type checks where
+Python's numeric equality would admit booleans or floats. A load-time validator
+should also be reused at readiness so injected or alternate loading paths
+cannot bypass the persisted-data contract.
+
+**Next opportunity:** At workspace scope, rotate to the least recently improved
+repository. When returning here, bound synchronous model inference with a
+measured, model-safe admission policy before attempting the higher-risk Keras
+artifact migration.
