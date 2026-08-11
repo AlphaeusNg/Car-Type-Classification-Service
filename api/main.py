@@ -3,13 +3,16 @@ Car Type Classification API
 FastAPI service for predicting car make/model from images
 """
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
-import logging
+import asyncio
 from contextlib import asynccontextmanager
-from typing import Dict, Any
-import sys
+import logging
 import os
+import sys
+from typing import Any, Dict
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,6 +46,14 @@ model = None
 class_mapping = None
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_CONCURRENT_PREDICTIONS = 1
+prediction_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PREDICTIONS)
+
+
+def run_model_inference(loaded_model, processed_image, index_to_class):
+    """Run and decode one synchronous model prediction."""
+    predictions = loaded_model.predict(processed_image, verbose=0)
+    return decode_predictions(predictions, index_to_class)
 
 
 def validate_runtime_artifacts(loaded_model, loaded_mapping):
@@ -101,7 +112,7 @@ def validate_runtime_artifacts(loaded_model, loaded_mapping):
 @asynccontextmanager
 async def lifespan(_app):
     """Load inference dependencies before serving requests."""
-    global model, class_mapping
+    global model, class_mapping, prediction_semaphore
     model = None
     class_mapping = None
 
@@ -112,6 +123,7 @@ async def lifespan(_app):
         validate_runtime_artifacts(loaded_model, loaded_mapping)
         model = loaded_model
         class_mapping = loaded_mapping
+        prediction_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PREDICTIONS)
         logger.info("✅ Model and class mapping loaded successfully!")
     except Exception as e:
         logger.error(f"❌ Failed to load model: {str(e)}")
@@ -173,15 +185,20 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
         raise HTTPException(status_code=413, detail="Image exceeds the 10 MB upload limit")
 
     try:
-        processed_image = preprocess_image(image_data)
+        processed_image = await run_in_threadpool(preprocess_image, image_data)
     except ValueError as exc:
         logger.warning("Rejected invalid image upload: %s", exc)
         raise HTTPException(status_code=400, detail="Invalid image data") from exc
 
     try:
-        # Make prediction
-        predictions = model.predict(processed_image, verbose=0)
-        decoded = decode_predictions(predictions, class_mapping["index_to_class"])
+        # TensorFlow inference is synchronous and model access is serialized.
+        async with prediction_semaphore:
+            decoded = await run_in_threadpool(
+                run_model_inference,
+                model,
+                processed_image,
+                class_mapping["index_to_class"],
+            )
         return {**decoded, "status": "success"}
         
     except Exception as e:

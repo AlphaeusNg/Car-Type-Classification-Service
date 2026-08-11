@@ -135,6 +135,10 @@ or single-image batch. The API accepts inference output only when it is one
 non-empty, finite numeric score row whose width matches `class_mapping.json`.
 Invalid model output is logged server-side and returned as the generic
 `Prediction failed` response.
+Image preprocessing and TensorFlow prediction run in worker threads so a slow
+inference does not block readiness traffic. Each service process admits one
+model prediction at a time; additional prediction requests wait asynchronously
+to avoid concurrent access to the shared Keras model.
 The decoded file format must also be JPEG or PNG; renaming another image type or
 changing only its upload MIME type is rejected. JPEG orientation metadata is
 applied before resize, so phone photos reach the model in their displayed

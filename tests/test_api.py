@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from io import BytesIO
+from threading import Event, Lock
 
 import numpy as np
 import pytest
@@ -32,6 +34,32 @@ class RawOutputModel:
     def predict(self, _image, verbose=0):
         assert verbose == 0
         return self.output
+
+
+class BlockingModel(FakeModel):
+    def __init__(self, predictions):
+        super().__init__(predictions)
+        self.first_prediction_started = Event()
+        self.release_predictions = Event()
+        self._state_lock = Lock()
+        self.active_predictions = 0
+        self.max_active_predictions = 0
+
+    def predict(self, image, verbose=0):
+        with self._state_lock:
+            self.active_predictions += 1
+            self.max_active_predictions = max(
+                self.max_active_predictions, self.active_predictions
+            )
+            self.first_prediction_started.set()
+
+        try:
+            if not self.release_predictions.wait(timeout=5):
+                raise TimeoutError("test prediction was not released")
+            return super().predict(image, verbose=verbose)
+        finally:
+            with self._state_lock:
+                self.active_predictions -= 1
 
 
 @pytest.fixture(autouse=True)
@@ -300,6 +328,49 @@ def test_predict_returns_ranked_classes(client, monkeypatch):
         "class-1",
         "class-0",
     ]
+
+
+def test_predict_keeps_health_responsive_and_serializes_model_access(monkeypatch):
+    loaded_model = BlockingModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    monkeypatch.setattr(api, "load_model", lambda: loaded_model)
+    monkeypatch.setattr(api, "load_class_mapping", mapping)
+    monkeypatch.setattr(
+        api,
+        "preprocess_image",
+        lambda _data: np.zeros((1, 224, 224, 3), dtype=np.float32),
+    )
+
+    def request_prediction(lifecycle_client):
+        return lifecycle_client.post(
+            "/predict",
+            files={"image": ("car.png", b"image", "image/png")},
+        )
+
+    health_while_blocked = None
+    with TestClient(api.app) as lifecycle_client:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            first = executor.submit(request_prediction, lifecycle_client)
+            assert loaded_model.first_prediction_started.wait(timeout=1)
+            second = executor.submit(request_prediction, lifecycle_client)
+            health = executor.submit(lifecycle_client.get, "/health")
+
+            try:
+                health_while_blocked = health.result(timeout=1)
+            except FutureTimeoutError:
+                pass
+            finally:
+                loaded_model.release_predictions.set()
+
+            prediction_responses = [
+                first.result(timeout=2),
+                second.result(timeout=2),
+            ]
+            health.result(timeout=2)
+
+    assert health_while_blocked is not None
+    assert health_while_blocked.status_code == 200
+    assert all(response.status_code == 200 for response in prediction_responses)
+    assert loaded_model.max_active_predictions == 1
 
 
 def test_predict_rejects_non_finite_model_output_without_exposing_details(

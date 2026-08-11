@@ -7,12 +7,13 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 27: 94 model-free tests cover the API boundary,
+- Baseline after Cycle 28: 95 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   exact class-mapping metadata, decoded-image policy, lightweight import, and
-  model artifact discovery/build command; 19 CI policy assertions keep the
-  complete lightweight gate on supported action runtimes without TensorFlow or
-  trained weights.
+  model artifact discovery/build command. Request-level concurrency coverage
+  proves slow synchronous inference stays off the event loop and shared model
+  access is serialized; 19 CI policy assertions keep the complete lightweight
+  gate on supported action runtimes without TensorFlow or trained weights.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
   production resolution has 17 Keras-only findings constrained by real model
   compatibility; the full training workspace now has the same Keras-only set.
@@ -21,8 +22,9 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction currently runs directly inside an async route with no admission control | Medium / medium-high | Requires a model-safe concurrency policy and request-level timing tests | Backlog |
+| 1 | Bound inference queue wait with explicit overload behavior | Reliability / resources | Medium-high: model calls are serialized, but callers can wait indefinitely behind a stalled prediction | Medium / medium | Requires a documented timeout/status policy that does not abandon a running TensorFlow thread | Backlog |
 | 2 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction ran directly inside an async route with no admission control | Medium / medium | Synchronized request test proves responsive health and one active model call | Completed in Cycle 28 |
 | — | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permitted extra reverse entries and weak label/index types | Small / low | Thirteen pure and runtime fixtures cover the exact typed inverse contract | Completed in Cycle 27 |
 | — | Clear non-Keras training-workspace audit findings | Security / maintenance | Medium-high: requests, notebook, JupyterLab, and python-dotenv retained 19 advisory records | Medium / medium | Fresh full install, tool imports, entry points, kernel execution, and audit isolate Keras as the only remaining exposure | Completed in Cycle 26 |
 | — | Audit and refresh deploy/test dependency pins | Security / maintenance | High: test and production resolution initially exposed 43 and 59 advisory records | Medium / medium | Fresh Python 3.12 tests, audits, and real model load separated safe upgrades from breaking Keras releases | Completed in Cycle 25 |
@@ -1217,3 +1219,71 @@ cannot bypass the persisted-data contract.
 repository. When returning here, bound synchronous model inference with a
 measured, model-safe admission policy before attempting the higher-risk Keras
 artifact migration.
+
+### Cycle 28 — Isolate and serialize synchronous inference (2026-08-11)
+
+**Why this won:** `/predict` was declared async but ran image preprocessing and
+TensorFlow directly on the event-loop thread. One slow model call therefore
+stalled readiness traffic, while deployment patterns with concurrent request
+loops could enter the shared Keras model simultaneously. This was the highest
+ranked remaining reliability opportunity and could be fixed without changing
+the response contract.
+
+**Plan and success criteria**
+
+1. Reproduce event-loop starvation with a synchronized request-level test.
+2. Move CPU/model work off-loop and allow at most one active prediction per
+   service process.
+3. Prove health remains responsive during a blocked model call, concurrent
+   predictions do not overlap, and both predictions still complete normally.
+4. Run the real ignored artifact through the new threaded path plus the full
+   warning-strict lightweight gate.
+
+**Changes**
+
+- Offloaded Pillow/NumPy preprocessing and TensorFlow prediction through
+  Starlette's worker-thread boundary.
+- Added a one-token asynchronous semaphore around model prediction and decode,
+  reconstructed for each successful application lifespan.
+- Extracted `run_model_inference` as the synchronous unit executed by the
+  worker and documented the per-process concurrency policy.
+- Added a synchronized two-request test with a deliberately blocked model,
+  concurrent health probe, and peak-active-call measurement.
+
+**Verification evidence**
+
+- Test-first evidence: the new request contract failed because `/health` could
+  not return until the blocked model was released.
+- Focused regression passed in 0.24s: health returned while inference remained
+  blocked, two prediction responses succeeded, and peak model concurrency was
+  exactly one.
+- `.venv/bin/python -m pytest -q -W error`: 95 passed in 1.21s (up from 94).
+- `.venv/bin/python -m pip check`: no broken requirements found.
+- `.venv/bin/python -m compileall -q api tests run.py prediction_example.py`:
+  passed; CRLF-aware whitespace validation passed.
+- Real artifact smoke loaded the 196-class `best_car_model.keras`, validated
+  its input/output metadata, and completed prediction and top-five decode from
+  a worker thread (`Dodge Challenger SRT8 2011`, confidence `0.890301`).
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 5/10 | 9/10 | Readiness no longer shares a blocked event loop and model calls cannot overlap |
+| Test coverage / verifiability | 7/10 | 10/10 | Synchronization-driven request coverage distinguishes both failure modes |
+| Maintainability | 7/10 | 9/10 | One named worker function and one explicit capacity constant own the policy |
+| Performance / resources | 4/10 | 9/10 | Event-loop availability is preserved without increasing model concurrency |
+| Security / robustness | 7/10 | 9/10 | Concurrent access to a mutable native ML runtime is eliminated per process |
+| Developer / user experience | 6/10 | 9/10 | Health and unrelated async traffic stay responsive during slow inference |
+
+**Lesson / process improvement:** Concurrency tests should coordinate on events
+inside the slow operation, not infer overlap from benchmark timings. Combining
+an in-flight health probe with a measured peak-call counter distinguishes an
+offload-only change from a serialization-only change. A real artifact smoke is
+still necessary because fake models cannot prove TensorFlow works from the
+selected worker context.
+
+**Next opportunity:** Locally, bound how long a request may wait to acquire the
+prediction lane and define explicit overload behavior without abandoning an
+already-running TensorFlow thread. At workspace scope, rotate to the portfolio
+repository before returning here so improvements continue across projects.
