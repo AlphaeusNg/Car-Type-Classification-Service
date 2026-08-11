@@ -529,6 +529,26 @@ def test_predict_rejects_non_finite_model_output_without_exposing_details(
     assert "finite" not in response.text
 
 
+def test_predict_rejects_non_probability_output_without_exposing_details(
+    client, monkeypatch
+):
+    make_ready(monkeypatch)
+    monkeypatch.setattr(
+        api,
+        "model",
+        RawOutputModel(np.array([[0.1, 0.2, 0.3, 0.2, 0.1]])),
+    )
+
+    response = client.post(
+        "/predict",
+        files={"image": ("car.png", b"image", "image/png")},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Prediction failed"
+    assert "sum to one" not in response.text
+
+
 def test_predict_does_not_expose_internal_errors(client, monkeypatch):
     make_ready(monkeypatch)
     monkeypatch.setattr(api, "model", FakeModel(error=RuntimeError("/private/model/path")))

@@ -61,6 +61,28 @@ def test_decode_predictions_rejects_malformed_model_output(
         decode_predictions(predictions, labels)
 
 
+@pytest.mark.parametrize(
+    ("predictions", "message"),
+    [
+        (np.array([[-0.1, 0.4, 0.7]]), "between zero and one"),
+        (np.array([[1.1, 0.0, 0.0]]), "between zero and one"),
+        (np.array([[0.1, 0.2, 0.3]]), "sum to one"),
+    ],
+)
+def test_decode_predictions_requires_probability_scores(predictions, message):
+    with pytest.raises(ValueError, match=message):
+        decode_predictions(predictions, prediction_labels())
+
+
+def test_decode_predictions_accepts_probability_rounding_error():
+    decoded = decode_predictions(
+        np.array([[0.1, 0.2, 0.70000005]], dtype=np.float32),
+        prediction_labels(),
+    )
+
+    assert decoded["predicted_class"] == "class-2"
+
+
 @pytest.mark.parametrize("top_k", [0, -1, True, 1.5])
 def test_decode_predictions_requires_positive_integer_top_k(top_k):
     with pytest.raises(ValueError, match="positive integer"):

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 MAX_DECODED_PIXELS = 50_000_000
 PREPROCESSED_IMAGE_SHAPE = (1, 224, 224, 3)
 ALLOWED_DECODED_IMAGE_FORMATS = frozenset({"JPEG", "PNG"})
+PROBABILITY_SUM_ABSOLUTE_TOLERANCE = 1e-5
 
 
 def validate_image_dimensions(size, max_pixels=MAX_DECODED_PIXELS):
@@ -51,6 +52,15 @@ def decode_predictions(predictions, index_to_class, top_k=5):
         raise ValueError("Prediction class mapping indices must be contiguous")
     if not np.isfinite(scores).all():
         raise ValueError("Prediction scores must all be finite")
+    if ((scores < 0) | (scores > 1)).any():
+        raise ValueError("Prediction scores must be between zero and one")
+    if not np.isclose(
+        scores[0].sum(),
+        1.0,
+        rtol=0.0,
+        atol=PROBABILITY_SUM_ABSOLUTE_TOLERANCE,
+    ):
+        raise ValueError("Prediction scores must sum to one")
     if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
         raise ValueError("top_k must be a positive integer")
 

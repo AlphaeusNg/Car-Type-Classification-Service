@@ -132,7 +132,8 @@ mapping must contain contiguous string indices and unique, non-blank labels;
 
 At startup, model output metadata must describe a rank-two tensor with a dynamic
 or single-image batch. The API accepts inference output only when it is one
-non-empty, finite numeric score row whose width matches `class_mapping.json`.
+non-empty, finite probability row whose values are between zero and one, sum to
+one within floating-point tolerance, and match the width of `class_mapping.json`.
 Invalid model output is logged server-side and returned as the generic
 `Prediction failed` response.
 Image preprocessing and TensorFlow prediction run in worker threads so a slow

@@ -7,10 +7,11 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 30: 98 model-free tests cover the API boundary,
+- Baseline after Cycle 31: 103 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
-  exact class-mapping metadata, decoded-image policy, lightweight import, and
-  model artifact discovery/build command. Request-level concurrency coverage
+  probability-score semantics, exact class-mapping metadata, decoded-image
+  policy, lightweight import, and model artifact discovery/build command.
+  Request-level concurrency coverage
   proves slow synchronous inference stays off the event loop and shared model
   access is serialized; callers wait at most five seconds for the model lane
   before receiving explicit retryable overload behavior. Image preprocessing is
@@ -27,6 +28,8 @@ completed autonomous improvement cycles.
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| 2 | Load inference artifacts without optimizer/training state | Reliability / performance | Low-medium: real readiness emits an optimizer-variable mismatch warning for state the API never uses | Small / low | Prove `compile=False` preserves both supported artifact fallback and real predictions | Backlog |
+| — | Require confidence outputs to be probabilities | Correctness / robustness | Medium-high: arbitrary finite logits were labeled and returned as confidence | Small / low | Five decoder/API regressions plus real 196-class prediction | Completed in Cycle 31 |
 | — | Bound pre-inference image-work concurrency | Security / resources | Medium-high: image decode/resize ran before model-lane admission, so bursts could occupy many worker threads and large decoded buffers | Medium / medium | Synchronized request coverage proves a two-worker ceiling, prompt overload, invalid-image recovery, and responsive health | Completed in Cycle 30 |
 | — | Bound inference queue wait with explicit overload behavior | Reliability / resources | Medium-high: model calls were serialized, but callers could wait indefinitely behind a stalled prediction | Medium / medium | Synchronized overload test proves timeout, active-work completion, lane recovery, and exclusive access | Completed in Cycle 29 |
 | — | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction ran directly inside an async route with no admission control | Medium / medium | Synchronized request test proves responsive health and one active model call | Completed in Cycle 28 |
@@ -1432,3 +1435,67 @@ re-export to remove the Keras 3.10 advisory constraint, but it requires
 prediction-equivalence evidence and should not be attempted as a casual pin
 change. At workspace scope, rotate to the portfolio repository before returning
 here, avoiding diminishing returns in the same service.
+
+### Cycle 31 — Require probability-valued confidence output (2026-08-11)
+
+**Why this won:** The only recorded higher-impact item is a trusted model
+re-export, a high-risk migration that explicitly requires equivalence evidence.
+Inspection found a smaller reversible correctness gap: the decoder rejected
+non-finite and malformed tensors but returned arbitrary finite logits as
+`confidence`. That made a broken activation or incompatible artifact look like
+a meaningful user probability.
+
+**Plan and success criteria**
+
+1. Reproduce acceptance of negative and non-normalized score rows.
+2. Require every score to lie in `[0, 1]` and the row to sum to one with a named
+   floating-point tolerance.
+3. Preserve normal float32 rounding, generic API error disclosure, and the real
+   ignored model's end-to-end response.
+4. Keep the complete warning-strict model-free, dependency, compilation, audit,
+   and whitespace gates green.
+
+**Changes**
+
+- Added an explicit probability-range and row-sum contract to
+  `decode_predictions`, after tensor-shape and finiteness validation.
+- Named the `1e-5` absolute sum tolerance and retained exact returned model
+  scores rather than silently clamping or renormalizing malformed output.
+- Added three rejection fixtures, a float32 rounding acceptance control, and an
+  HTTP regression proving internal probability diagnostics remain private.
+- Documented what `confidence` means at the public response boundary.
+
+**Verification evidence**
+
+- Test-first evidence: both negative and non-normalized vectors were accepted
+  against the old decoder; the rounding control already passed.
+- Focused decoder/API validation: 6 relevant checks passed after implementation.
+- `.venv/bin/python -m pytest -q -W error`: 103 passed in 1.21s (up from 98);
+  dependency consistency, compilation, and CRLF-aware whitespace checks passed.
+- Real GPU artifact smoke loaded 196 classes and completed `/predict` through
+  lifespan with HTTP 200, five ranked results, and confidence `0.871446`
+  (`Dodge Challenger SRT8 2011`).
+- The lightweight dependency audit remains clean; the production audit remains
+  exactly the documented 17 Keras-only records.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 5/10 | 9/10 | Returned confidence now has an enforced probability meaning |
+| Test coverage / verifiability | 7/10 | 10/10 | Range, normalization, tolerance, disclosure, and real-model paths agree |
+| Maintainability | 8/10 | 9/10 | One named tolerance makes the score contract explicit |
+| Performance / resources | 9/10 | 9/10 | Two vectorized checks over 196 scores are negligible beside inference |
+| Security / robustness | 8/10 | 9/10 | Malformed model output fails closed without exposing diagnostics |
+| Developer / user experience | 6/10 | 9/10 | Clients can treat `confidence` as a probability rather than an arbitrary score |
+
+**Lesson / process improvement:** Validate the semantic meaning of response
+fields, not only their tensor shape and primitive type. Use a positive rounding
+control beside rejection fixtures so numerical strictness does not accidentally
+reject legitimate float32 softmax output, and retain a real-artifact smoke for
+ML boundary changes.
+
+**Next opportunity:** Load inference artifacts with `compile=False` so the API
+does not deserialize unused optimizer state; the real smoke exposed an optimizer
+variable-mismatch warning. The Keras re-export remains the higher-impact but
+high-risk migration. At workspace scope, rotate to the portfolio repository.
