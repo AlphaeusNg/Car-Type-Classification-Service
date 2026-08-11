@@ -80,6 +80,18 @@ def validate_runtime_artifacts(loaded_model, loaded_mapping):
         raise ValueError("model must expose a single output shape")
     if isinstance(output_shape[0], (tuple, list)):
         raise ValueError("multi-output models are not supported")
+    if len(output_shape) != 2:
+        raise ValueError("model output shape must have rank 2")
+    output_batch = output_shape[0]
+    if output_batch is not None:
+        try:
+            output_batch = int(output_batch)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "model output batch dimension must be known or dynamic"
+            ) from exc
+        if output_batch != 1:
+            raise ValueError("model output must describe one score row per image")
     try:
         output_width = int(output_shape[-1])
     except (TypeError, ValueError) as exc:

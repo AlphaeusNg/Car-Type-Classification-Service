@@ -7,7 +7,7 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 22: 72 model-free tests cover the API boundary,
+- Baseline after Cycle 23: 78 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   decoded-image policy, lightweight import, and model artifact discovery/build
   command; GitHub Actions runs them without TensorFlow or trained weights.
@@ -16,9 +16,10 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Validate model output rank and batch metadata at startup | Correctness / reliability | High: rank-three or fixed multi-row outputs can report ready then fail every request | Small / low | Extend shared artifact validation; runtime decoder already requires `(1, classes)` | Next |
+| 1 | Modernize and policy-test GitHub Actions | Process / observability | Medium: hosted CI passes with a Node 20 deprecation annotation and has no timeout, permissions, or policy contracts | Small-medium / low | Mirror the bounded CI patterns proven in sibling repos | Next |
 | 2 | Audit and refresh stale media/upload dependency pins | Security / maintenance | Medium-high: Pillow 10.0.0 and python-multipart 0.0.6 require evidence-based review | Medium / medium | Run a vulnerability audit and compatibility tests before changing pins | Backlog |
-| 3 | Modernize and policy-test GitHub Actions | Process / observability | Medium: workflow still uses checkout v4/setup-python v5 and has no timeout, permissions, or policy contracts | Small-medium / low | Mirror the bounded CI patterns proven in sibling repos | Backlog |
+| 3 | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permits extra reverse entries and weak label types | Small / low | Extend pure mapping fixtures and runtime artifact contracts | Backlog |
+| — | Validate model output rank and batch metadata at startup | Correctness / reliability | High: rank-three or fixed multi-row outputs could report ready then fail every request | Small / low | Six rejection/acceptance contracts align startup with the runtime decoder | Completed in Cycle 23 |
 | — | Verify decoded image format instead of trusting MIME alone | Correctness / security | Medium: renamed unsupported formats passed the JPEG/PNG header check | Small / low | Real GIF/WebP fixtures at utility and endpoint boundaries | Completed in Cycle 22 |
 | — | Apply JPEG EXIF orientation before resize | Correctness / UX | Medium-high: phone photos were classified sideways despite valid pixels | Small / low | Asymmetric orientation-6 JPEG | Completed in Cycle 21 |
 | — | Validate model input shape against preprocessing | Correctness / reliability | High: an incompatible artifact passed readiness then failed every request | Small / low | Shared `(1, 224, 224, 3)` contract | Completed in Cycle 20 |
@@ -893,3 +894,58 @@ prove the complete path more reliably than handcrafted magic bytes.
 **Next opportunity:** Require startup model output metadata to describe exactly
 one rank-two score row per preprocessed image, so rank-three or fixed multi-row
 artifacts fail before readiness rather than on every prediction.
+
+### Cycle 23 — Validate model output metadata at startup (2026-08-11)
+
+**Why this won:** Runtime decoding required exactly one two-dimensional score
+row, but startup inspected only the last output dimension. Rank-one,
+rank-three, and fixed multi-row output shapes could therefore report healthy
+and then fail every request.
+
+**Plan and success criteria**
+
+1. Reproduce each incompatible metadata shape without TensorFlow or weights.
+2. Require rank two plus a dynamic or exactly-one batch dimension before width
+   and mapping validation.
+3. Explicitly retain dynamic-batch and single-batch compatible shapes.
+4. Preserve all existing runtime, lifecycle, image, and deployment contracts.
+
+**Changes**
+
+- Extended `validate_runtime_artifacts` to require rank-two output metadata.
+- Required a dynamic or integer batch dimension of one, with a distinct error
+  for malformed batch metadata.
+- Added four incompatible-shape regressions and two compatible-shape controls.
+- Documented the startup output-metadata contract next to runtime score rules.
+
+**Verification evidence**
+
+- Test-first evidence: all three initial incompatible shapes passed startup
+  validation without raising.
+- Focused validation: seven output-shape, input-shape, and lifecycle checks
+  passed after implementation.
+- `.venv/bin/python -m pytest -q`: 78 passed in 1.24s (up from 72).
+- `.venv/bin/python -m compileall -q api tests run.py prediction_example.py`:
+  passed.
+- `.venv/bin/python -m pip check`: no broken requirements found.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 5/10 | 9/10 | Output metadata incompatible with the decoder cannot become ready |
+| Test coverage / verifiability | 6/10 | 10/10 | Four rejection and two acceptance shapes define the startup boundary |
+| Maintainability | 8/10 | 9/10 | Startup and runtime now share the same rank/batch assumptions |
+| Performance / resources | 9/10 | 9/10 | Constant-time checks run once during lifespan startup |
+| Security / robustness | 8/10 | 9/10 | Malformed artifact metadata fails closed before request traffic |
+
+**Lesson / process improvement:** Startup compatibility must validate the full
+tensor contract, not just the dimension used for class count. Pair negative
+fixtures with explicit positive controls so stricter readiness checks cannot
+silently narrow supported dynamic models.
+
+**Next opportunity:** Modernize GitHub Actions and add repository-owned policy
+contracts for least privilege, bounded execution, supported action runtimes,
+and the complete lightweight verification gate; the latest hosted run passed
+with a Node 20 deprecation annotation that this cycle did not hide.

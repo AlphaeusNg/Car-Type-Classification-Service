@@ -110,6 +110,31 @@ def test_runtime_artifacts_reject_model_mapping_width_mismatch():
 
 
 @pytest.mark.parametrize(
+    ("output_shape", "message"),
+    [
+        ((5,), "rank 2"),
+        ((None, 1, 5), "rank 2"),
+        ((2, 5), "one score row"),
+        (("many", 5), "batch dimension"),
+    ],
+)
+def test_runtime_artifacts_reject_incompatible_model_output(output_shape, message):
+    loaded_model = FakeModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    loaded_model.output_shape = output_shape
+
+    with pytest.raises(ValueError, match=message):
+        api.validate_runtime_artifacts(loaded_model, mapping())
+
+
+@pytest.mark.parametrize("output_shape", [(None, 5), (1, 5)])
+def test_runtime_artifacts_accept_compatible_model_output(output_shape):
+    loaded_model = FakeModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    loaded_model.output_shape = output_shape
+
+    api.validate_runtime_artifacts(loaded_model, mapping())
+
+
+@pytest.mark.parametrize(
     ("input_shape", "message"),
     [
         (None, "single input shape"),
