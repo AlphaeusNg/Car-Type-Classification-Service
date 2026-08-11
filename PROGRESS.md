@@ -7,23 +7,23 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 25: 80 model-free tests cover the API boundary,
+- Baseline after Cycle 26: 81 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   decoded-image policy, lightweight import, and model artifact discovery/build
   command; 19 CI policy assertions keep the complete lightweight gate on
   supported action runtimes without TensorFlow or trained weights.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
   production resolution has 17 Keras-only findings constrained by real model
-  compatibility; the full training workspace has those plus 19 tooling findings.
+  compatibility; the full training workspace now has the same Keras-only set.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Clear remaining non-Keras training-workspace audit findings | Security / maintenance | Medium-high: requests, notebook, JupyterLab, and python-dotenv retain 19 advisory records | Medium / medium | Resolve and smoke the notebook/tooling environment separately from inference | Next |
+| 1 | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permits extra reverse entries and weak label types | Small / low | Extend pure mapping fixtures and runtime artifact contracts | Next |
 | 2 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
-| 3 | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permits extra reverse entries and weak label types | Small / low | Extend pure mapping fixtures and runtime artifact contracts | Backlog |
-| 4 | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction currently runs directly inside an async route with no admission control | Medium / medium-high | Requires a model-safe concurrency policy and request-level timing tests | Backlog |
+| 3 | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction currently runs directly inside an async route with no admission control | Medium / medium-high | Requires a model-safe concurrency policy and request-level timing tests | Backlog |
+| — | Clear non-Keras training-workspace audit findings | Security / maintenance | Medium-high: requests, notebook, JupyterLab, and python-dotenv retained 19 advisory records | Medium / medium | Fresh full install, tool imports, entry points, kernel execution, and audit isolate Keras as the only remaining exposure | Completed in Cycle 26 |
 | — | Audit and refresh deploy/test dependency pins | Security / maintenance | High: test and production resolution initially exposed 43 and 59 advisory records | Medium / medium | Fresh Python 3.12 tests, audits, and real model load separated safe upgrades from breaking Keras releases | Completed in Cycle 25 |
 | — | Modernize and policy-test GitHub Actions | Process / observability | Medium: hosted CI passed with Node 20 deprecation annotations and lacked timeout, permissions, or policy contracts | Small-medium / low | Nineteen policy assertions enforce the bounded v7 workflow | Completed in Cycle 24 |
 | — | Validate model output rank and batch metadata at startup | Correctness / reliability | High: rank-three or fixed multi-row outputs could report ready then fail every request | Small / low | Six rejection/acceptance contracts align startup with the runtime decoder | Completed in Cycle 23 |
@@ -1092,3 +1092,65 @@ nominally clean but unusable service.
 (`requests`, `notebook`, `jupyterlab`, and `python-dotenv`) in an isolated Python
 3.12 environment, preserving notebook kernel startup and keeping the Keras
 compatibility constraint separate.
+
+### Cycle 26 — Clear training-workspace tooling advisories (2026-08-11)
+
+**Why this won:** Cycle 25 isolated 19 non-Keras vulnerability records to the
+training/notebook manifest. Updating that separate compatibility domain could
+remove the remaining fixable exposure without touching the working model or
+the Keras migration constraint.
+
+**Plan and success criteria**
+
+1. Pin the audited requests, Notebook, JupyterLab, and dotenv releases plus a
+   pytest-asyncio release compatible with pytest 9.
+2. Resolve and install the complete Python 3.12 workspace from scratch.
+3. Run warning-free tests, compilation, imports, Jupyter entry points, kernel
+   discovery, and actual kernel execution.
+4. Re-audit the full graph and require Keras to be the only remaining finding.
+
+**Changes**
+
+- Updated requests to 2.34.2, Notebook to 7.6.1, JupyterLab to 4.6.3,
+  python-dotenv to 1.2.2, and pytest-asyncio to 1.4.0.
+- Added `httpx2` 2.7.0 to the full workspace after the fresh install exposed
+  that FastAPI tests could not use Starlette's non-deprecated client path.
+- Added a training-tool audit baseline and extended shared `httpx2` alignment;
+  model-free coverage increased from 80 to 81 tests.
+
+**Verification evidence**
+
+- Test-first evidence: the new tooling contract failed first on requests 2.31.0.
+- Audit: `requirements.txt` fell from 36 records across five packages to the 17
+  documented Keras-only records; all 19 tooling records are eliminated.
+- First full-environment attempt: package resolution and Jupyter imports passed,
+  but warnings-as-errors stopped test collection because `httpx2` existed only
+  in `requirements-test.txt`. Adding it to the workspace fixed the drift.
+- Fresh full Python 3.12 environment: 81 tests passed warning-free in 1.02s,
+  compilation passed, and `pip check` reported no broken requirements.
+- Import smoke reported requests 2.34.2, Notebook 7.6.1, JupyterLab 4.6.3, and
+  pytest-asyncio 1.4.0.
+- `jupyter --version`, Notebook/Lab version entry points, and kernel discovery
+  succeeded; a real kernel started, became ready, executed `assert 1 + 1 == 2`,
+  returned `status: ok`, and shut down.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 7/10 | 9/10 | Full-manifest tests and a live kernel prove more than resolver compatibility |
+| Test coverage / verifiability | 7/10 | 10/10 | Pin contracts, fresh install, imports, entry points, execution, and audit agree |
+| Maintainability | 7/10 | 9/10 | Shared test-client and tooling pins are explicit across their applicable manifests |
+| Performance / resources | 8/10 | 8/10 | Runtime inference is unchanged; verification cost is development-only |
+| Security / safety | 6/10 | 9/10 | Every fixable tooling advisory is removed; only the documented Keras constraint remains |
+
+**Lesson / process improvement:** A complete environment can fail even when its
+individual tools import: run the project's own warning-strict suite inside that
+environment. For notebook stacks, validate discovery and execute code in a real
+kernel; version commands alone do not prove the kernel path works.
+
+**Next opportunity:** Locally, require an exact typed bijection between
+`index_to_class` and `class_to_index` so malformed mapping metadata fails at
+startup. At workspace scope, rotate to another repository before returning to
+this service, avoiding diminishing returns after five consecutive car-service
+cycles.

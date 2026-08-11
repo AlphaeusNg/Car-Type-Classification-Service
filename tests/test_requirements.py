@@ -62,7 +62,18 @@ def test_audited_runtime_and_test_pins_stay_aligned():
         if name != "keras":
             assert tests[name] == version
     assert tests["httpx2"] == "2.7.0"
+    assert workspace["httpx2"] == tests["httpx2"]
     assert "httpx" not in tests
+
+
+def test_training_tool_pins_match_audited_baseline():
+    workspace = dependency_versions("requirements.txt")
+
+    assert workspace["requests"] == "2.34.2"
+    assert workspace["notebook"] == "7.6.1"
+    assert workspace["jupyterlab"] == "4.6.3"
+    assert workspace["python-dotenv"] == "1.2.2"
+    assert workspace["pytest-asyncio"] == "1.4.0"
 
 
 def test_docker_uses_inference_requirements():

@@ -16,6 +16,7 @@ tensorboard-data-server==0.7.2
 
 # API dependencies (verified versions)
 fastapi==0.139.2
+httpx2==2.7.0
 uvicorn==0.35.0
 python-multipart==0.0.32
 starlette==1.6.0
@@ -36,8 +37,8 @@ scipy==1.16.0
 # Jupyter notebook support (exact working versions)
 jupyter==1.0.0
 ipykernel==6.25.2
-notebook==7.0.3
-jupyterlab==4.4.5
+notebook==7.6.1
+jupyterlab==4.6.3
 ipython==9.4.0
 
 # Data loading and processing
@@ -47,10 +48,10 @@ joblib==1.5.1
 kagglehub==0.3.12
 
 # Additional utilities (exact working versions)
-requests==2.31.0
-python-dotenv==1.0.0
+requests==2.34.2
+python-dotenv==1.2.2
 tqdm==4.67.1
 
 # Development and testing
 pytest==9.1.1
-pytest-asyncio==0.21.1
+pytest-asyncio==1.4.0
