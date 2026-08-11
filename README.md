@@ -64,12 +64,16 @@ That's it! API runs at **http://localhost:8000** 🎉
 
 ```bash
 python3 -m pytest -q
+python3 -m pip check
+python3 -m compileall -q api tests run.py prediction_example.py
 ```
 
 The tests use a lightweight fake predictor, so trained model files are not
 required to verify health, upload validation, error handling, and response
-ranking. CI installs `requirements-test.txt`; TensorFlow remains a runtime and
-training dependency and is imported only when a real model is loaded.
+ranking. The test suite also enforces the CI workflow's supported actions,
+least-privilege permissions, bounded execution, and complete verification gate.
+CI installs `requirements-test.txt`; TensorFlow remains a runtime and training
+dependency and is imported only when a real model is loaded.
 
 Dependency manifests are intentionally scoped:
 

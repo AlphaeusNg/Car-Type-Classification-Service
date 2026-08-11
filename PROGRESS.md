@@ -7,18 +7,20 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 23: 78 model-free tests cover the API boundary,
+- Baseline after Cycle 24: 79 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   decoded-image policy, lightweight import, and model artifact discovery/build
-  command; GitHub Actions runs them without TensorFlow or trained weights.
+  command; 19 CI policy assertions keep the complete lightweight gate on
+  supported action runtimes without TensorFlow or trained weights.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Modernize and policy-test GitHub Actions | Process / observability | Medium: hosted CI passes with a Node 20 deprecation annotation and has no timeout, permissions, or policy contracts | Small-medium / low | Mirror the bounded CI patterns proven in sibling repos | Next |
-| 2 | Audit and refresh stale media/upload dependency pins | Security / maintenance | Medium-high: Pillow 10.0.0 and python-multipart 0.0.6 require evidence-based review | Medium / medium | Run a vulnerability audit and compatibility tests before changing pins | Backlog |
-| 3 | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permits extra reverse entries and weak label types | Small / low | Extend pure mapping fixtures and runtime artifact contracts | Backlog |
+| 1 | Audit and refresh stale media/upload dependency pins | Security / maintenance | Medium-high: Pillow 10.0.0 and python-multipart 0.0.6 require evidence-based review | Medium / medium | Run a vulnerability audit and compatibility tests before changing pins | Next |
+| 2 | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permits extra reverse entries and weak label types | Small / low | Extend pure mapping fixtures and runtime artifact contracts | Backlog |
+| 3 | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction currently runs directly inside an async route with no admission control | Medium / medium-high | Requires a model-safe concurrency policy and request-level timing tests | Backlog |
+| — | Modernize and policy-test GitHub Actions | Process / observability | Medium: hosted CI passed with Node 20 deprecation annotations and lacked timeout, permissions, or policy contracts | Small-medium / low | Nineteen policy assertions enforce the bounded v7 workflow | Completed in Cycle 24 |
 | — | Validate model output rank and batch metadata at startup | Correctness / reliability | High: rank-three or fixed multi-row outputs could report ready then fail every request | Small / low | Six rejection/acceptance contracts align startup with the runtime decoder | Completed in Cycle 23 |
 | — | Verify decoded image format instead of trusting MIME alone | Correctness / security | Medium: renamed unsupported formats passed the JPEG/PNG header check | Small / low | Real GIF/WebP fixtures at utility and endpoint boundaries | Completed in Cycle 22 |
 | — | Apply JPEG EXIF orientation before resize | Correctness / UX | Medium-high: phone photos were classified sideways despite valid pixels | Small / low | Asymmetric orientation-6 JPEG | Completed in Cycle 21 |
@@ -949,3 +951,64 @@ silently narrow supported dynamic models.
 contracts for least privilege, bounded execution, supported action runtimes,
 and the complete lightweight verification gate; the latest hosted run passed
 with a Node 20 deprecation annotation that this cycle did not hide.
+
+### Cycle 24 — Modernize and policy-test CI (2026-08-11)
+
+**Why this won:** Two consecutive hosted runs passed with a Node 20 deprecation
+annotation because checkout v4 and setup-python v5 were being forced onto a
+newer runtime. The workflow also had no explicit permissions, timeout,
+concurrency policy, dependency consistency check, or repository-owned guard
+against regression.
+
+**Plan and success criteria**
+
+1. Verify current action majors against official upstream release data.
+2. Encode supported actions, least privilege, stale-run cancellation, timeout,
+   interpreter/cache pins, and every local gate command in a fast policy test.
+3. Make the workflow execute its own policy before the full suite.
+4. Pass locally, then require a successful hosted run with zero annotations.
+
+**Changes**
+
+- Upgraded `actions/checkout` and `actions/setup-python` from v4/v5 to their
+  current v7 Node 24 majors.
+- Granted only read access to repository contents, grouped runs by workflow/ref,
+  canceled superseded runs, and bounded the job at 10 minutes.
+- Added dependency consistency and expanded compilation to include
+  `prediction_example.py`.
+- Added one model-free policy test with 19 assertions covering triggers,
+  permissions, concurrency, timeout, supported runtimes, caching, install,
+  self-enforcement, full pytest, dependency, and compilation commands.
+- Documented the complete local gate and workflow-policy coverage.
+
+**Verification evidence**
+
+- Official GitHub releases identified checkout v7.0.1 and setup-python v7.0.0
+  as the current releases on 2026-07-20.
+- Test-first evidence: the policy test failed first on the absent read-only
+  permissions block against the original workflow.
+- Focused policy run: 1 test / 19 assertions passed after modernization.
+- `.venv/bin/python -m pytest -q`: 79 passed in 1.20s (up from 78).
+- `.venv/bin/python -m compileall -q api tests run.py prediction_example.py`:
+  passed.
+- `.venv/bin/python -m pip check`: no broken requirements found.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 8/10 | 9/10 | CI now executes the same complete gate documented for local use |
+| Test coverage / verifiability | 6/10 | 10/10 | Nineteen repository-owned assertions prevent workflow-policy drift |
+| Maintainability | 7/10 | 9/10 | Supported runtime and gate obligations are explicit and executable |
+| Performance / resources | 6/10 | 9/10 | Stale same-ref runs cancel and every job is time-bounded |
+| Security / safety | 6/10 | 9/10 | CI token access is explicitly read-only and deprecated runtimes are removed |
+
+**Lesson / process improvement:** A passing hosted workflow can still carry
+actionable lifecycle debt. Treat annotations as verification failures in the
+improvement rubric, confirm upstream versions from primary sources, and encode
+the desired workflow shape locally so future updates cannot silently regress it.
+
+**Next opportunity:** Audit the production/test dependency pins for disclosed
+vulnerabilities, then update the smallest affected set in fresh lightweight and
+production-resolution environments before changing any version constraint.
