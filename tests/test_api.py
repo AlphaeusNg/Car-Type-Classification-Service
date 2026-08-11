@@ -373,6 +373,46 @@ def test_predict_keeps_health_responsive_and_serializes_model_access(monkeypatch
     assert loaded_model.max_active_predictions == 1
 
 
+def test_predict_bounds_queue_wait_without_abandoning_active_inference(monkeypatch):
+    loaded_model = BlockingModel([0.05, 0.1, 0.6, 0.15, 0.1])
+    monkeypatch.setattr(api, "load_model", lambda: loaded_model)
+    monkeypatch.setattr(api, "load_class_mapping", mapping)
+    monkeypatch.setattr(api, "PREDICTION_QUEUE_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(
+        api,
+        "preprocess_image",
+        lambda _data: np.zeros((1, 224, 224, 3), dtype=np.float32),
+    )
+
+    def request_prediction(lifecycle_client):
+        return lifecycle_client.post(
+            "/predict",
+            files={"image": ("car.png", b"image", "image/png")},
+        )
+
+    with TestClient(api.app) as lifecycle_client:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(request_prediction, lifecycle_client)
+            assert loaded_model.first_prediction_started.wait(timeout=1)
+            overloaded = executor.submit(request_prediction, lifecycle_client)
+
+            try:
+                overloaded_response = overloaded.result(timeout=1)
+            finally:
+                loaded_model.release_predictions.set()
+
+            first_response = first.result(timeout=2)
+
+        recovered_response = request_prediction(lifecycle_client)
+
+    assert overloaded_response.status_code == 503
+    assert overloaded_response.json() == {"detail": "Prediction queue is busy; retry later"}
+    assert overloaded_response.headers["retry-after"] == "5"
+    assert first_response.status_code == 200
+    assert recovered_response.status_code == 200
+    assert loaded_model.max_active_predictions == 1
+
+
 def test_predict_rejects_non_finite_model_output_without_exposing_details(
     client, monkeypatch
 ):

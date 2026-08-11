@@ -47,6 +47,8 @@ class_mapping = None
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_CONCURRENT_PREDICTIONS = 1
+PREDICTION_QUEUE_TIMEOUT_SECONDS = 5.0
+PREDICTION_RETRY_AFTER_SECONDS = 5
 prediction_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PREDICTIONS)
 
 
@@ -191,19 +193,36 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Invalid image data") from exc
 
     try:
-        # TensorFlow inference is synchronous and model access is serialized.
-        async with prediction_semaphore:
-            decoded = await run_in_threadpool(
-                run_model_inference,
-                model,
-                processed_image,
-                class_mapping["index_to_class"],
-            )
+        await asyncio.wait_for(
+            prediction_semaphore.acquire(),
+            timeout=PREDICTION_QUEUE_TIMEOUT_SECONDS,
+        )
+    except TimeoutError as exc:
+        logger.warning(
+            "Prediction queue wait exceeded %.1f seconds",
+            PREDICTION_QUEUE_TIMEOUT_SECONDS,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Prediction queue is busy; retry later",
+            headers={"Retry-After": str(PREDICTION_RETRY_AFTER_SECONDS)},
+        ) from exc
+
+    try:
+        # Do not time out this worker: TensorFlow threads cannot be abandoned safely.
+        decoded = await run_in_threadpool(
+            run_model_inference,
+            model,
+            processed_image,
+            class_mapping["index_to_class"],
+        )
         return {**decoded, "status": "success"}
-        
+
     except Exception as e:
         logger.exception("Prediction failed")
         raise HTTPException(status_code=500, detail="Prediction failed") from e
+    finally:
+        prediction_semaphore.release()
 
 
 @app.exception_handler(Exception)

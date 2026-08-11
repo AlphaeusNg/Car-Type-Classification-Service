@@ -7,13 +7,15 @@ completed autonomous improvement cycles.
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 28: 95 model-free tests cover the API boundary,
+- Baseline after Cycle 29: 96 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   exact class-mapping metadata, decoded-image policy, lightweight import, and
   model artifact discovery/build command. Request-level concurrency coverage
   proves slow synchronous inference stays off the event loop and shared model
-  access is serialized; 19 CI policy assertions keep the complete lightweight
-  gate on supported action runtimes without TensorFlow or trained weights.
+  access is serialized; callers wait at most five seconds for the model lane
+  before receiving explicit retryable overload behavior. Nineteen CI policy
+  assertions keep the complete lightweight gate on supported action runtimes
+  without TensorFlow or trained weights.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
   production resolution has 17 Keras-only findings constrained by real model
   compatibility; the full training workspace now has the same Keras-only set.
@@ -22,8 +24,9 @@ completed autonomous improvement cycles.
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Bound inference queue wait with explicit overload behavior | Reliability / resources | Medium-high: model calls are serialized, but callers can wait indefinitely behind a stalled prediction | Medium / medium | Requires a documented timeout/status policy that does not abandon a running TensorFlow thread | Backlog |
+| 1 | Bound pre-inference image-work concurrency | Security / resources | Medium-high: image decode/resize runs before model-lane admission, so bursts can still occupy many worker threads and large decoded buffers | Medium / medium | Measure worker/memory behavior and preserve prompt rejection of invalid uploads | Backlog |
 | 2 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Bound inference queue wait with explicit overload behavior | Reliability / resources | Medium-high: model calls were serialized, but callers could wait indefinitely behind a stalled prediction | Medium / medium | Synchronized overload test proves timeout, active-work completion, lane recovery, and exclusive access | Completed in Cycle 29 |
 | — | Bound synchronous inference concurrency | Performance / reliability | Medium-high: CPU/GPU prediction ran directly inside an async route with no admission control | Medium / medium | Synchronized request test proves responsive health and one active model call | Completed in Cycle 28 |
 | — | Require an exact class-mapping bijection | Correctness / observability | Low-medium: startup checks required pairs but permitted extra reverse entries and weak label/index types | Small / low | Thirteen pure and runtime fixtures cover the exact typed inverse contract | Completed in Cycle 27 |
 | — | Clear non-Keras training-workspace audit findings | Security / maintenance | Medium-high: requests, notebook, JupyterLab, and python-dotenv retained 19 advisory records | Medium / medium | Fresh full install, tool imports, entry points, kernel execution, and audit isolate Keras as the only remaining exposure | Completed in Cycle 26 |
@@ -1287,3 +1290,68 @@ selected worker context.
 prediction lane and define explicit overload behavior without abandoning an
 already-running TensorFlow thread. At workspace scope, rotate to the portfolio
 repository before returning here so improvements continue across projects.
+
+### Cycle 29 — Bound inference queue wait (2026-08-11)
+
+**Why this won:** Cycle 28 serialized access to the shared Keras model, but a
+stalled prediction made every later caller wait indefinitely. Bounding only
+the acquisition step offered the highest reliability gain without attempting
+to cancel a TensorFlow worker that Python cannot safely stop.
+
+**Plan and success criteria**
+
+1. Reproduce an indefinitely queued second request with synchronized model
+   events rather than timing inference heuristically.
+2. Bound only model-lane acquisition and define a stable retryable HTTP policy.
+3. Prove the active request finishes, timed-out work never enters the model,
+   and the lane remains reusable afterward.
+4. Run the real 196-class artifact through the HTTP route plus the complete
+   warning-strict lightweight gate.
+
+**Changes**
+
+- Added a five-second timeout around `prediction_semaphore.acquire()` and a
+  temporary-capacity HTTP 503 response with `Retry-After: 5` when it expires.
+- Kept the TensorFlow worker itself un-timed and release the semaphore in a
+  `finally` block only after that worker returns or raises.
+- Added a synchronized request regression covering overload response, active
+  inference completion, post-overload recovery, and peak model concurrency.
+- Documented the queue and retry contract in the API usage guide.
+
+**Verification evidence**
+
+- Test-first evidence: with the first prediction deliberately blocked, the
+  second request still had no response after one second under the previous
+  implementation.
+- Focused concurrency pair: 2 passed in 0.31s; the overloaded request returned
+  503, the first and recovery requests returned 200, and peak model concurrency
+  remained exactly one.
+- `.venv/bin/python -m pytest -q -W error`: 96 passed in 1.34s (up from 95).
+- Real GPU artifact smoke loaded `best_car_model.keras`, reported 196 ready
+  classes, and completed `/predict` with five results (`Dodge Challenger SRT8
+  2011`, confidence `0.871521`).
+- `.venv/bin/python -m pip check`: no broken requirements; compilation passed.
+- CRLF-aware diff validation caught one new whitespace defect; it was removed
+  immediately and the static gate then passed.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 6/10 | 9/10 | A stalled model no longer creates unbounded request waits |
+| Test coverage / verifiability | 8/10 | 10/10 | Coordinated requests prove timeout, completion, recovery, and exclusivity |
+| Maintainability | 8/10 | 9/10 | Named timeout/retry constants and one explicit acquire/release boundary own policy |
+| Performance / resources | 5/10 | 8/10 | Each queued model-lane wait is bounded without increasing inference concurrency |
+| Security / robustness | 7/10 | 8/10 | Capacity exhaustion now fails closed with no internal diagnostics exposed |
+| Developer / user experience | 6/10 | 9/10 | Clients receive deterministic 503 semantics and an actionable retry hint |
+
+**Lesson / process improvement:** Apply timeouts only to work that cancellation
+can actually stop. A timeout around the whole threadpool await would release
+exclusive access while TensorFlow might still be running. Event-coordinated
+tests, an explicit retry contract, and a recovery request together distinguish
+bounded waiting from abandoned execution or leaked capacity.
+
+**Next opportunity:** Bound pre-inference image decoding/resizing concurrency;
+it currently occurs before model-lane admission and can occupy multiple worker
+threads and large decoded buffers during an upload burst. At workspace scope,
+rotate to the portfolio repository before returning here.

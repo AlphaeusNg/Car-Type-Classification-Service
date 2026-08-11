@@ -138,7 +138,10 @@ Invalid model output is logged server-side and returned as the generic
 Image preprocessing and TensorFlow prediction run in worker threads so a slow
 inference does not block readiness traffic. Each service process admits one
 model prediction at a time; additional prediction requests wait asynchronously
-to avoid concurrent access to the shared Keras model.
+for that lane for up to five seconds. A request that cannot acquire the lane
+receives HTTP 503 with `Retry-After: 5`. An inference that already owns the lane
+is never timed out or abandoned, preserving exclusive access to the shared
+Keras model.
 The decoded file format must also be JPEG or PNG; renaming another image type or
 changing only its upload MIME type is rejected. JPEG orientation metadata is
 applied before resize, so phone photos reach the model in their displayed
