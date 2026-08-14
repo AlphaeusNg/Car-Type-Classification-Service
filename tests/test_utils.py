@@ -212,12 +212,12 @@ def test_load_model_uses_preferred_artifact_first(tmp_path):
     preferred.touch()
     calls = []
 
-    def loader(path):
-        calls.append(path)
+    def loader(path, **options):
+        calls.append((path, options))
         return LoadedModel()
 
     assert isinstance(load_model(tmp_path, loader), LoadedModel)
-    assert calls == [str(preferred)]
+    assert calls == [(str(preferred), {"compile": False})]
 
 
 def test_load_model_falls_back_after_preferred_artifact_fails(tmp_path):
@@ -227,14 +227,17 @@ def test_load_model_falls_back_after_preferred_artifact_fails(tmp_path):
     legacy.touch()
     calls = []
 
-    def loader(path):
-        calls.append(path)
+    def loader(path, **options):
+        calls.append((path, options))
         if path == str(preferred):
             raise ValueError("incompatible keras file")
         return LoadedModel()
 
     assert isinstance(load_model(tmp_path, loader), LoadedModel)
-    assert calls == [str(preferred), str(legacy)]
+    assert calls == [
+        (str(preferred), {"compile": False}),
+        (str(legacy), {"compile": False}),
+    ]
 
 
 def test_load_model_reports_existing_artifact_failures(tmp_path):
@@ -243,7 +246,7 @@ def test_load_model_reports_existing_artifact_failures(tmp_path):
     preferred.touch()
     legacy.touch()
 
-    def loader(path):
+    def loader(path, **_options):
         raise ValueError(f"cannot decode {Path(path).name}")
 
     with pytest.raises(RuntimeError, match="found but none could be loaded") as error:
@@ -257,4 +260,4 @@ def test_load_model_reports_existing_artifact_failures(tmp_path):
 
 def test_load_model_reports_truly_missing_artifacts(tmp_path):
     with pytest.raises(FileNotFoundError, match="No model file found"):
-        load_model(tmp_path, lambda _path: LoadedModel())
+        load_model(tmp_path, lambda _path, **_options: LoadedModel())

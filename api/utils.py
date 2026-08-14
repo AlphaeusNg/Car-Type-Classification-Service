@@ -153,7 +153,7 @@ def load_model(project_root: Path | None = None, model_loader=None) -> tf.keras.
         if model_path.exists():
             try:
                 print(f"🔄 Loading model from: {model_path}")
-                model = model_loader(str(model_path))
+                model = model_loader(str(model_path), compile=False)
                 print(f"✅ Model loaded! Input shape: {model.input_shape}")
                 return model
             except Exception as e:

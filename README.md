@@ -88,6 +88,11 @@ model artifacts; re-export and a real readiness smoke are required before that
 pin can be raised. The current audit status and remaining advisories are tracked
 in `PROGRESS.md`.
 
+The API loads those artifacts with Keras `compile=False`: serving uses only the
+network architecture and weights, so optimizer/training state is neither
+restored nor allowed to create irrelevant optimizer-variable warnings. This
+does not change notebook training or model export.
+
 `run.py` and the Docker build accept the same model formats as the API loader:
 `best_car_model.keras`, `car_classification_model.h5`, or
 `models/car_classification_savedmodel`. For a manual Docker build, select the

@@ -3,11 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
+Last updated: 2026-08-14 (workspace Cycle 150; service Cycle 32)
+
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 31: 103 model-free tests cover the API boundary,
+- Baseline after Cycle 32: 103 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -19,6 +21,9 @@ completed autonomous improvement cycles.
   after invalid input, and explicit retry semantics. Nineteen CI policy
   assertions keep the complete lightweight gate on supported action runtimes
   without TensorFlow or trained weights.
+- Inference artifacts load with `compile=False`; the real preferred `.keras`
+  artifact preserves identical 196-class predictions without restoring unused
+  optimizer state or emitting its variable-mismatch warning.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
   production resolution has 17 Keras-only findings constrained by real model
   compatibility; the full training workspace now has the same Keras-only set.
@@ -28,7 +33,7 @@ completed autonomous improvement cycles.
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
-| 2 | Load inference artifacts without optimizer/training state | Reliability / performance | Low-medium: real readiness emits an optimizer-variable mismatch warning for state the API never uses | Small / low | Prove `compile=False` preserves both supported artifact fallback and real predictions | Backlog |
+| — | Load inference artifacts without optimizer/training state | Reliability / performance | Low-medium | Small / low | Preferred/fallback loader options plus zero-delta real GPU prediction equivalence | Completed in Cycle 32 |
 | — | Require confidence outputs to be probabilities | Correctness / robustness | Medium-high: arbitrary finite logits were labeled and returned as confidence | Small / low | Five decoder/API regressions plus real 196-class prediction | Completed in Cycle 31 |
 | — | Bound pre-inference image-work concurrency | Security / resources | Medium-high: image decode/resize ran before model-lane admission, so bursts could occupy many worker threads and large decoded buffers | Medium / medium | Synchronized request coverage proves a two-worker ceiling, prompt overload, invalid-image recovery, and responsive health | Completed in Cycle 30 |
 | — | Bound inference queue wait with explicit overload behavior | Reliability / resources | Medium-high: model calls were serialized, but callers could wait indefinitely behind a stalled prediction | Medium / medium | Synchronized overload test proves timeout, active-work completion, lane recovery, and exclusive access | Completed in Cycle 29 |
@@ -1499,3 +1504,70 @@ ML boundary changes.
 does not deserialize unused optimizer state; the real smoke exposed an optimizer
 variable-mismatch warning. The Keras re-export remains the higher-impact but
 high-risk migration. At workspace scope, rotate to the portfolio repository.
+
+### Cycle 32 — Load inference artifacts without training state (2026-08-14)
+
+**Why this won:** Re-exporting the models onto a patched Keras line remains the
+highest-impact issue, but it is a high-risk artifact migration that requires
+trusted export and broad equivalence evidence. The next reversible item was
+specific and directly observed: readiness restored an RMSprop optimizer the API
+never uses and emitted a 34-versus-70 variable mismatch warning.
+
+**Plan and success criteria**
+
+1. Require `compile=False` for every preferred and fallback artifact attempt.
+2. Preserve artifact selection, aggregated failure behavior, and runtime shape
+   validation.
+3. Compare compiled and inference-only loads on the same real image and require
+   identical 196-class predictions with no optimizer warning on the new path.
+
+**Changes**
+
+- Passed `compile=False` to Keras deserialization for every supported artifact,
+  retaining architecture and weights while skipping unused training state.
+- Strengthened preferred and fallback loader-injection contracts to assert the
+  exact option on each attempted path; failure and missing-artifact fixtures now
+  accept the production-compatible loader signature.
+- Documented the inference-only boundary and clarified that notebook training
+  and export behavior do not change.
+
+**Verification evidence**
+
+- Test-first: the preferred-artifact spy received `{}` rather than
+  `{"compile": False}` before implementation; all four focused loader cases
+  pass afterward, including exact options on both failed preferred and
+  successful legacy attempts.
+- Real Keras 3.10 / TensorFlow 2.19 GPU comparison loaded the ignored 262 MB
+  `.keras` artifact both ways. The compiled load emitted the RMSprop optimizer
+  mismatch; inference-only emitted no Python warnings. Both returned shape
+  `(1, 196)`, top index 85, confidence `0.8713902831`, and maximum absolute
+  score delta `0.0`.
+- The real production loader then validated `(None, 224, 224, 3)` input and
+  `(None, 196)` output metadata and decoded five results for the same image
+  (`Dodge Challenger SRT8 2011`, confidence `0.871363`) with an empty captured
+  warning list. Separate TensorFlow CUDA factory-registration diagnostics remain
+  environment-level output and were not misreported as fixed.
+- `.venv/bin/python -m pytest -q -W error`: 103 passed; `pip check` reported no
+  broken requirements; full Python compilation and CRLF-aware whitespace checks
+  passed. Dependency pins and their documented audit status are unchanged.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 7/10 | 9/10 | Serving restores only inference state and preserves exact real predictions |
+| Test coverage / verifiability | 6/10 | 10/10 | Preferred/fallback call options and zero-delta real GPU output are proven |
+| Maintainability | 8/10 | 9/10 | The inference-only intent is explicit at the single artifact boundary |
+| Performance / resources | 7/10 | 8/10 | Unused optimizer restoration is skipped; no unsupported memory claim is made |
+| Security / robustness | 7/10 | 7/10 | Trusted-artifact policy and pinned Keras advisory exposure are unchanged |
+| Developer experience / observability | 5/10 | 9/10 | A misleading optimizer mismatch no longer obscures readiness logs |
+
+**Lesson / process improvement:** ML serving equivalence needs real artifact and
+input evidence, not only a loader mock. Compare the complete probability vector,
+record warning classes separately from native runtime diagnostics, and avoid
+claiming memory savings without direct measurement.
+
+**Next opportunity:** Re-export trusted model artifacts on a current patched
+Keras release, then require representative prediction-vector equivalence before
+changing the pin. This remains intentionally unattempted without a trusted
+migration procedure and broader validation corpus.
