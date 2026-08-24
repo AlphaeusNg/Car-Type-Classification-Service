@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-08-25 (service Cycle 36)
+Last updated: 2026-08-25 (service Cycle 37)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 36: 111 model-free tests cover the API boundary,
+- Baseline after Cycle 37: 113 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -28,7 +28,10 @@ Last updated: 2026-08-25 (service Cycle 36)
   the allowlist check, while decoded bytes remain independently constrained.
 - Inference artifacts load with `compile=False`; the real preferred `.keras`
   artifact preserves identical 196-class predictions without restoring unused
-  optimizer state or emitting its variable-mismatch warning.
+  optimizer state or emitting its variable-mismatch warning. The loader,
+  launcher, and Docker build share one Keras-3-compatible `.keras` / `.h5`
+  artifact list; TensorFlow SavedModel directories fail early with migration
+  guidance instead of reaching an impossible `load_model()` call.
 - The standalone prediction example imports without TensorFlow and reuses the
   API's model/mapping compatibility, bounded EXIF-aware preprocessing, and
   probability-decoding contracts instead of maintaining a second inference path.
@@ -43,6 +46,7 @@ Last updated: 2026-08-25 (service Cycle 36)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Stop advertising Keras-3-incompatible SavedModel deployment | Correctness / deploy reliability | High: a documented launcher/API/Docker artifact could never load under the pinned runtime | Small / low | Real Keras 3.10 failure, official format contract, two real supported-artifact predictions, and model-free regressions | Completed in Cycle 37 |
 | — | Accept standards-valid image media-type syntax | Correctness / robustness | Low-medium: raw case-sensitive comparison rejected valid JPEG/PNG multipart metadata | Tiny / low | Two endpoint regressions cover mixed case and parameters without weakening decoded-format validation | Completed in Cycle 36 |
 | — | Remove and prevent nonexistent Python entry points in README | Documentation / DX | Low-medium: setup guidance advertised a training script that never shipped | Tiny / low | Reproduced missing path plus generic inline Python-reference contract | Completed in Cycle 35 |
 | — | Align the standalone prediction example with hardened API inference | Correctness / maintainability | Medium-high: the example eagerly loaded training state and bypassed mapping, image, shape, and probability validation | Small / low | Three model-free regressions plus real GPU model/sample execution | Completed in Cycle 34 |
@@ -76,6 +80,75 @@ Last updated: 2026-08-25 (service Cycle 36)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 37 — Remove the impossible SavedModel deployment path (2026-08-25)
+
+**Why this won:** With the Keras security migration still requiring a trusted
+re-export, a fresh deployment audit found that `run.py`, the API loader, Docker
+context, tests, and documentation all advertised a TensorFlow SavedModel
+directory. The real ignored artifact fails under the pinned Keras 3.10 runtime,
+whose `load_model()` supports `.keras` and legacy H5 but not SavedModel. A
+documented setup could therefore pass discovery and fail only during startup.
+
+**Plan and success criteria**
+
+1. Reproduce the real SavedModel failure and corroborate the format boundary
+   against official Keras 3 guidance.
+2. Make SavedModel-only setups fail before launch/build with explicit migration
+   guidance, while preserving `.keras` preference and H5 fallback.
+3. Give the launcher and API loader one dependency-free artifact definition.
+4. Prove both retained formats still load, validate, preprocess, predict, and
+   decode through the production path.
+
+**Changes**
+
+- Added `api/model_artifacts.py` as the single dependency-free source for the
+  supported `.keras` and `.h5` candidates used by both `run.py` and the loader.
+- Removed TensorFlow SavedModel from discovery and the Docker context allowlist;
+  existing local ignored artifact bytes were not changed or deleted.
+- Added an early unsupported-directory regression, shared-order contract, and
+  Docker-context assertion. Missing-artifact output now tells operators to
+  re-export SavedModel rather than implying that directory can run.
+- Corrected the root/model documentation and agent guidance, with a link to the
+  official Keras 3 SavedModel migration contract.
+
+**Verification evidence**
+
+- Pre-edit real reproduction: Keras 3.10.0 rejected
+  `models/car_classification_savedmodel` with `ValueError: File format not
+  supported`; the official Keras guide independently documents the same
+  `load_model()` boundary.
+- Test-first: launcher discovery, loader invocation, and Docker allowlisting all
+  failed their new requirements; the other 58 focused checks stayed green.
+- `.venv/bin/python -m pytest -q -W error`: 113 passed in 1.37s. `pip check`,
+  full Python compilation, and CRLF-aware diff checks passed.
+- Real GPU production-path smoke: `.keras` and H5 both validated 196 classes,
+  processed the checked-in sample, returned five probabilities, and predicted
+  class 85 (`Dodge Challenger SRT8 2011`) at respectively `0.8706393242` and
+  `0.8708401322` confidence.
+- An isolated `pip-audit` of `requirements-test.txt` found zero known
+  vulnerabilities. Dependency pins and large ignored artifacts are unchanged.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 3/10 | 10/10 | Every discovered artifact is loadable by the pinned runtime |
+| Test coverage / verifiability | 4/10 | 10/10 | Three red boundaries plus both real retained formats execute |
+| Maintainability | 5/10 | 10/10 | Launcher and loader consume one dependency-free ordered list |
+| Performance / resources | 7/10 | 9/10 | Dead SavedModel bytes no longer enter Docker build context |
+| Security / robustness | 7/10 | 8/10 | Unsupported serialization fails before service startup |
+| Developer experience | 3/10 | 10/10 | Runtime, Docker, README, model notes, and agent guidance agree |
+
+**Lesson / process improvement:** Model-format compatibility must be verified
+against the pinned serializer, not inferred from an artifact's presence. Keep
+discovery dependency-free and shared so setup tooling can fail early without
+loading TensorFlow or duplicating the compatibility list.
+
+**Next opportunity:** Re-export the trusted `.keras` and H5 artifacts on a
+patched Keras release and prove prediction-vector equivalence across a
+representative corpus. This remains high-risk and externally constrained, so
+rotate repositories until migration authority and evidence are available.
 
 ### Cycle 6 — Harden and test the API boundary (2026-08-09)
 
