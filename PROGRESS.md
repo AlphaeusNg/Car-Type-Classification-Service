@@ -128,6 +128,8 @@ documented setup could therefore pass discovery and fail only during startup.
   `0.8708401322` confidence.
 - An isolated `pip-audit` of `requirements-test.txt` found zero known
   vulnerabilities. Dependency pins and large ignored artifacts are unchanged.
+- Hosted CI run `32781902063` passed the Python 3.12 workflow policy, all 113
+  model-free tests, dependency consistency, and compilation in 19 seconds.
 
 **Scores (change-specific)**
 
