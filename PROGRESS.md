@@ -1776,6 +1776,8 @@ uploads were rejected before their already-independent decoded-byte check.
   all three focused media-type cases passed.
 - `.venv/bin/python -m pytest -q -W error`: 111 passed in 1.50s, up from 109.
   `pip check`, full Python compilation, and CRLF-aware whitespace checks passed.
+- Hosted CI run `32775689879` passed workflow policy, all tests, dependency
+  consistency, and compilation on Python 3.12 in 20 seconds.
 - Correctness/reliability: 7/10 → 9/10; boundary verifiability: 8/10 → 10/10;
   maintainability: 9/10 → 9/10; security/robustness: 9/10 → 9/10. Decoded bytes
   still must be JPEG or PNG, so normalization does not widen the file policy.
