@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-08-14 (workspace Cycle 150; service Cycle 32)
+Last updated: 2026-08-25 (service Cycle 33)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 32: 103 model-free tests cover the API boundary,
+- Baseline after Cycle 33: 105 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -21,6 +21,9 @@ Last updated: 2026-08-14 (workspace Cycle 150; service Cycle 32)
   after invalid input, and explicit retry semantics. Nineteen CI policy
   assertions keep the complete lightweight gate on supported action runtimes
   without TensorFlow or trained weights.
+- `/predict` request bodies are bounded before multipart parsing/spooling by
+  both declared length and actual receive-stream bytes; the 10 MiB image limit
+  retains a separate 64 KiB multipart-envelope allowance.
 - Inference artifacts load with `compile=False`; the real preferred `.keras`
   artifact preserves identical 196-class predictions without restoring unused
   optimizer state or emitting its variable-mismatch warning.
@@ -33,6 +36,7 @@ Last updated: 2026-08-14 (workspace Cycle 150; service Cycle 32)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Bound request bytes before multipart file spooling | Security / resources | Medium-high: the endpoint's 10 MiB read happened only after framework multipart parsing could spool an arbitrarily large file | Small / low | Declared-length and chunked receive tests plus all normal API requests | Completed in Cycle 33 |
 | — | Load inference artifacts without optimizer/training state | Reliability / performance | Low-medium | Small / low | Preferred/fallback loader options plus zero-delta real GPU prediction equivalence | Completed in Cycle 32 |
 | — | Require confidence outputs to be probabilities | Correctness / robustness | Medium-high: arbitrary finite logits were labeled and returned as confidence | Small / low | Five decoder/API regressions plus real 196-class prediction | Completed in Cycle 31 |
 | — | Bound pre-inference image-work concurrency | Security / resources | Medium-high: image decode/resize ran before model-lane admission, so bursts could occupy many worker threads and large decoded buffers | Medium / medium | Synchronized request coverage proves a two-worker ceiling, prompt overload, invalid-image recovery, and responsive health | Completed in Cycle 30 |
@@ -1571,3 +1575,68 @@ claiming memory savings without direct measurement.
 Keras release, then require representative prediction-vector equivalence before
 changing the pin. This remains intentionally unattempted without a trusted
 migration procedure and broader validation corpus.
+
+### Cycle 33 — Bound uploads before multipart spooling (2026-08-25)
+
+**Why this won:** The Keras re-export remains high-risk and externally
+constrained. Inspection found an independent resource-boundary defect: the API
+read at most 10 MiB from `UploadFile`, but FastAPI/Starlette had already parsed
+the multipart request and could spool an arbitrarily large file before the
+endpoint executed. The advertised upload limit therefore did not bound the
+server's request/disk work.
+
+**Plan and success criteria**
+
+1. Reproduce an oversized body reaching framework validation before the
+   endpoint's size policy.
+2. Reject declared oversize before parsing and count actual ASGI receive bytes
+   so absent or false `Content-Length` cannot bypass the limit.
+3. Preserve the 10 MiB image contract with a small fixed multipart allowance,
+   all normal API behavior, and the complete model-free verification gate.
+
+**Changes**
+
+- Added a pure-ASGI `/predict` body limiter at the outer application boundary.
+  It fast-rejects declared bodies over 10 MiB + 64 KiB and independently stops
+  receive streams that cross the same ceiling.
+- Retained the existing exact 10 MiB file check inside the endpoint; the extra
+  64 KiB is only an envelope budget for multipart headers and boundaries.
+- Added request-level coverage proving rejection happens before form parsing
+  and a direct multi-chunk ASGI contract proving requests without a length
+  header are counted cumulatively.
+- Documented both request and file limits without changing model artifacts,
+  prediction semantics, or dependency pins.
+
+**Verification evidence**
+
+- Test-first: a five-byte body against a four-byte test budget returned 422
+  from framework validation instead of the required 413 before middleware.
+- Focused post-change regressions: 2 passed, including a no-`Content-Length`
+  stream that crosses the budget on its second chunk.
+- Existing environment: 105 tests passed warning-strict in 1.46s (up from
+  103); `pip check`, compilation, and CRLF-aware whitespace checks passed.
+- Fresh isolated resolution from `requirements-test.txt`: 105 tests passed
+  warning-strict in 1.55s on the current pinned FastAPI/Starlette graph.
+- Isolated `pip-audit -r requirements-test.txt`: no known vulnerabilities.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 6/10 | 9/10 | The public size policy now governs work before request parsing |
+| Test coverage / verifiability | 5/10 | 9/10 | Declared and undeclared streaming boundaries have distinct contracts |
+| Maintainability | 7/10 | 9/10 | One small ASGI middleware owns the transport-level policy |
+| Performance / resources | 3/10 | 9/10 | Multipart spooling is bounded to one documented request envelope |
+| Security / robustness | 4/10 | 9/10 | Large and dishonest-length uploads fail closed before model readiness |
+| Developer / user experience | 7/10 | 9/10 | Oversize callers receive a stable 413 and the two limits are documented |
+
+**Lesson / process improvement:** Endpoint reads cannot retroactively bound
+framework parsing. For upload services, inspect where multipart decoding and
+temporary-file spooling occur, then enforce a transport-level ceiling as well
+as the domain-specific file limit. Test declared length and observed stream
+bytes separately.
+
+**Next opportunity:** Rotate to Seeking-Biblical-Truth and inspect its exporter
+and sync verification for a small technical reliability gain that does not
+require changing the owner's note content. The Keras migration remains blocked
+until trusted re-export and representative equivalence evidence are available.

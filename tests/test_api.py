@@ -1,3 +1,4 @@
+import asyncio
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from io import BytesIO
 from threading import Event, Lock
@@ -269,6 +270,61 @@ def test_predict_returns_service_unavailable_before_model_load(client):
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Model is not ready"
+
+
+def test_predict_rejects_oversized_request_before_form_parsing(client, monkeypatch):
+    monkeypatch.setattr(api, "MAX_REQUEST_BODY_BYTES", 4, raising=False)
+
+    response = client.post(
+        "/predict",
+        content=b"12345",
+        headers={"Content-Type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request exceeds the upload size limit"}
+
+
+def test_predict_request_limit_counts_streamed_body_without_content_length(monkeypatch):
+    monkeypatch.setattr(api, "MAX_REQUEST_BODY_BYTES", 4)
+    request_messages = iter(
+        [
+            {"type": "http.request", "body": b"123", "more_body": True},
+            {"type": "http.request", "body": b"45", "more_body": False},
+        ]
+    )
+    downstream_messages = []
+    response_messages = []
+
+    async def receive():
+        return next(request_messages)
+
+    async def send(message):
+        response_messages.append(message)
+
+    async def downstream(_scope, limited_receive, _send):
+        downstream_messages.append(await limited_receive())
+        downstream_messages.append(await limited_receive())
+
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/predict",
+        "raw_path": b"/predict",
+        "query_string": b"",
+        "headers": [],
+        "client": ("127.0.0.1", 1234),
+        "server": ("testserver", 80),
+    }
+    middleware = api.PredictRequestBodyLimitMiddleware(downstream)
+
+    asyncio.run(middleware(scope, receive, send))
+
+    assert len(downstream_messages) == 1
+    assert response_messages[0]["status"] == 413
+    assert b"Request exceeds the upload size limit" in response_messages[1]["body"]
 
 
 def test_predict_rejects_unsupported_media_type(client, monkeypatch):

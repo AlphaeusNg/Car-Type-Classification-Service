@@ -46,6 +46,8 @@ model = None
 class_mapping = None
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_MULTIPART_OVERHEAD_BYTES = 64 * 1024
+MAX_REQUEST_BODY_BYTES = MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 MAX_CONCURRENT_IMAGE_PROCESSING = 2
 IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS = 1.0
 IMAGE_PROCESSING_RETRY_AFTER_SECONDS = 1
@@ -54,6 +56,61 @@ PREDICTION_QUEUE_TIMEOUT_SECONDS = 5.0
 PREDICTION_RETRY_AFTER_SECONDS = 5
 image_processing_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGE_PROCESSING)
 prediction_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PREDICTIONS)
+
+
+class RequestBodyTooLarge(Exception):
+    """Internal signal raised before multipart parsing exceeds its budget."""
+
+
+class PredictRequestBodyLimitMiddleware:
+    """Bound `/predict` request bytes before Starlette spools uploaded files."""
+
+    def __init__(self, wrapped_app):
+        self.wrapped_app = wrapped_app
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope.get("type") != "http"
+            or scope.get("method") != "POST"
+            or scope.get("path") not in {"/predict", "/predict/"}
+        ):
+            await self.wrapped_app(scope, receive, send)
+            return
+
+        for name, value in scope.get("headers", []):
+            if name.lower() != b"content-length":
+                continue
+            try:
+                declared_length = int(value)
+            except (TypeError, ValueError):
+                break
+            if declared_length > MAX_REQUEST_BODY_BYTES:
+                await self._reject(scope, receive, send)
+                return
+
+        received_bytes = 0
+
+        async def receive_limited():
+            nonlocal received_bytes
+            message = await receive()
+            if message.get("type") == "http.request":
+                received_bytes += len(message.get("body", b""))
+                if received_bytes > MAX_REQUEST_BODY_BYTES:
+                    raise RequestBodyTooLarge
+            return message
+
+        try:
+            await self.wrapped_app(scope, receive_limited, send)
+        except RequestBodyTooLarge:
+            await self._reject(scope, receive, send)
+
+    @staticmethod
+    async def _reject(scope, receive, send):
+        response = JSONResponse(
+            status_code=413,
+            content={"detail": "Request exceeds the upload size limit"},
+        )
+        await response(scope, receive, send)
 
 
 def run_model_inference(loaded_model, processed_image, index_to_class):
@@ -149,6 +206,7 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+app.add_middleware(PredictRequestBodyLimitMiddleware)
 
 
 @app.get("/")

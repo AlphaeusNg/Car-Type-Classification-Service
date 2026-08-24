@@ -159,6 +159,12 @@ changing only its upload MIME type is rejected. JPEG orientation metadata is
 applied before resize, so phone photos reach the model in their displayed
 orientation.
 
+The service rejects a `/predict` request body above 10 MiB plus a 64 KiB
+multipart envelope before FastAPI parses or spools the upload. It checks both a
+declared `Content-Length` and the bytes actually received, so missing or false
+length headers cannot bypass the request-level resource bound. The image file
+itself remains limited to 10 MiB.
+
 ### Interactive Documentation
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
