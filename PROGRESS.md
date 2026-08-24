@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-08-25 (service Cycle 35)
+Last updated: 2026-08-25 (service Cycle 36)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 35: 109 model-free tests cover the API boundary,
+- Baseline after Cycle 36: 111 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -23,7 +23,9 @@ Last updated: 2026-08-25 (service Cycle 35)
   without TensorFlow or trained weights.
 - `/predict` request bodies are bounded before multipart parsing/spooling by
   both declared length and actual receive-stream bytes; the 10 MiB image limit
-  retains a separate 64 KiB multipart-envelope allowance.
+  retains a separate 64 KiB multipart-envelope allowance. Standards-valid
+  case-insensitive and parameterized JPEG/PNG media types are normalized before
+  the allowlist check, while decoded bytes remain independently constrained.
 - Inference artifacts load with `compile=False`; the real preferred `.keras`
   artifact preserves identical 196-class predictions without restoring unused
   optimizer state or emitting its variable-mismatch warning.
@@ -41,6 +43,7 @@ Last updated: 2026-08-25 (service Cycle 35)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Accept standards-valid image media-type syntax | Correctness / robustness | Low-medium: raw case-sensitive comparison rejected valid JPEG/PNG multipart metadata | Tiny / low | Two endpoint regressions cover mixed case and parameters without weakening decoded-format validation | Completed in Cycle 36 |
 | — | Remove and prevent nonexistent Python entry points in README | Documentation / DX | Low-medium: setup guidance advertised a training script that never shipped | Tiny / low | Reproduced missing path plus generic inline Python-reference contract | Completed in Cycle 35 |
 | — | Align the standalone prediction example with hardened API inference | Correctness / maintainability | Medium-high: the example eagerly loaded training state and bypassed mapping, image, shape, and probability validation | Small / low | Three model-free regressions plus real GPU model/sample execution | Completed in Cycle 34 |
 | — | Bound request bytes before multipart file spooling | Security / resources | Medium-high: the endpoint's 10 MiB read happened only after framework multipart parsing could spool an arbitrarily large file | Small / low | Declared-length and chunked receive tests plus all normal API requests | Completed in Cycle 33 |
@@ -1750,3 +1753,38 @@ contract prevents the same class of drift when entry points are renamed later.
 **Next opportunity:** Force rotation now. The only remaining car-service item
 is the trusted Keras migration, which remains blocked on re-export authority and
 representative equivalence evidence.
+
+### Cycle 36 — Normalize valid image media types (2026-08-25)
+
+**Why this won:** The Keras migration remains blocked and high-risk. A fresh API
+boundary audit found a small independent correctness defect: MIME type tokens
+are case-insensitive and may carry parameters, but `/predict` compared the raw
+multipart value verbatim. Valid `Image/JPEG` and parameterized `image/png`
+uploads were rejected before their already-independent decoded-byte check.
+
+**Exact changes**
+
+- Normalize the declared upload type by taking its base media type, trimming
+  optional whitespace, and folding ASCII case before the existing allowlist.
+- Added parameterized endpoint coverage for mixed-case JPEG and parameterized
+  PNG declarations. The unsupported media-type and disguised GIF/WebP tests are
+  unchanged and remain green.
+
+**Verification evidence and scores**
+
+- Test-first: both new cases returned HTTP 400 before implementation; afterward
+  all three focused media-type cases passed.
+- `.venv/bin/python -m pytest -q -W error`: 111 passed in 1.50s, up from 109.
+  `pip check`, full Python compilation, and CRLF-aware whitespace checks passed.
+- Correctness/reliability: 7/10 → 9/10; boundary verifiability: 8/10 → 10/10;
+  maintainability: 9/10 → 9/10; security/robustness: 9/10 → 9/10. Decoded bytes
+  still must be JPEG or PNG, so normalization does not widen the file policy.
+
+**Lesson / process improvement:** Validate protocol metadata according to its
+grammar before applying a domain allowlist. Keep the client-controlled claim
+and decoded-content checks separate so standards compliance does not weaken the
+security boundary.
+
+**Next opportunity:** Rotate to Seeking-Biblical-Truth for an exporter/sync
+reliability audit. The car service's remaining Keras upgrade still requires a
+trusted re-export and representative equivalence corpus.
