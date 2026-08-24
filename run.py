@@ -12,16 +12,13 @@ import shlex
 import shutil
 from pathlib import Path
 
+from api.model_artifacts import MODEL_CANDIDATES, find_model_artifact
+
 # Configuration
 PROJECT_NAME = "car-classification-service"
 DOCKER_IMAGE = f"{PROJECT_NAME}:latest"
 DEFAULT_PORT = 8000
 API_MODULE = "api.main:app"
-MODEL_CANDIDATES = (
-    Path("best_car_model.keras"),
-    Path("car_classification_model.h5"),
-    Path("models/car_classification_savedmodel"),
-)
 CLASS_MAPPING_PATH = Path("class_mapping.json")
 
 
@@ -35,14 +32,6 @@ def valid_port(value):
         raise argparse.ArgumentTypeError("port must be between 1 and 65535")
     return port
 
-
-def find_model_artifact(root=Path(".")):
-    """Return the first model artifact supported by api.utils.load_model."""
-    for relative_path in MODEL_CANDIDATES:
-        candidate = root / relative_path
-        if candidate.exists():
-            return candidate
-    return None
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -150,7 +139,7 @@ def build_docker():
     model_path = find_model_artifact()
     missing_files = []
     if model_path is None:
-        missing_files.append("a supported model artifact")
+        missing_files.append("a supported .keras or .h5 model artifact")
     if not CLASS_MAPPING_PATH.exists():
         missing_files.append(str(CLASS_MAPPING_PATH))
 
@@ -184,7 +173,7 @@ def run_local_api(port=DEFAULT_PORT, reload=True):
     model_path = find_model_artifact()
     missing_files = []
     if model_path is None:
-        missing_files.append("a supported model artifact")
+        missing_files.append("a supported .keras or .h5 model artifact")
     if not CLASS_MAPPING_PATH.exists():
         missing_files.append(str(CLASS_MAPPING_PATH))
 
@@ -320,7 +309,7 @@ def auto_setup_and_run():
     model_path = find_model_artifact()
     missing_files = []
     if model_path is None:
-        missing_files.append("a supported model artifact")
+        missing_files.append("a supported .keras or .h5 model artifact")
     if not CLASS_MAPPING_PATH.exists():
         missing_files.append(str(CLASS_MAPPING_PATH))
     

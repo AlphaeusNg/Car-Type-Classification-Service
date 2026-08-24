@@ -240,6 +240,21 @@ def test_load_model_falls_back_after_preferred_artifact_fails(tmp_path):
     ]
 
 
+def test_load_model_rejects_keras3_incompatible_savedmodel_directory(tmp_path):
+    saved_model = tmp_path / "models" / "car_classification_savedmodel"
+    saved_model.mkdir(parents=True)
+    calls = []
+
+    def loader(path, **options):
+        calls.append((path, options))
+        return LoadedModel()
+
+    with pytest.raises(FileNotFoundError, match="must use .keras or .h5"):
+        load_model(tmp_path, loader)
+
+    assert calls == []
+
+
 def test_load_model_reports_existing_artifact_failures(tmp_path):
     preferred = tmp_path / "best_car_model.keras"
     legacy = tmp_path / "car_classification_model.h5"

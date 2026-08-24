@@ -93,10 +93,13 @@ network architecture and weights, so optimizer/training state is neither
 restored nor allowed to create irrelevant optimizer-variable warnings. This
 does not change notebook training or model export.
 
-`run.py` and the Docker build accept the same model formats as the API loader:
-`best_car_model.keras`, `car_classification_model.h5`, or
-`models/car_classification_savedmodel`. For a manual Docker build, select the
-artifact explicitly when it is not the default:
+`run.py` and the Docker build accept the same model formats as the Keras 3 API
+loader: `best_car_model.keras` or `car_classification_model.h5`. Keras 3 does
+not load a TensorFlow SavedModel directory through `load_model()`; the
+[official Keras 3 migration guide](https://keras.io/guides/migrating_to_keras_3/#loading-a-tf-savedmodel)
+requires a different inference-layer contract for that format. Re-export a
+legacy SavedModel to `.keras` before using it with this service. For a manual
+Docker build, select the artifact explicitly when it is not the default:
 
 ```bash
 docker build --build-arg MODEL_PATH=car_classification_model.h5 -t car-type-clf .

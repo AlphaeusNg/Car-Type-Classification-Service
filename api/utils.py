@@ -12,6 +12,8 @@ import io
 from typing import TYPE_CHECKING, Dict, Any
 from pathlib import Path
 
+from api.model_artifacts import MODEL_CANDIDATES
+
 if TYPE_CHECKING:
     import tensorflow as tf
 
@@ -142,11 +144,7 @@ def load_model(project_root: Path | None = None, model_loader=None) -> tf.keras.
         project_root = Path(project_root)
     
     # Try different model formats in order of preference
-    model_paths = [
-        project_root / "best_car_model.keras",     # TF 2.19+ format (preferred)
-        project_root / "car_classification_model.h5",  # Legacy format
-        project_root / "models" / "car_classification_savedmodel",  # SavedModel
-    ]
+    model_paths = [project_root / relative for relative in MODEL_CANDIDATES]
     
     load_failures = []
     for model_path in model_paths:
@@ -168,12 +166,17 @@ def load_model(project_root: Path | None = None, model_loader=None) -> tf.keras.
         )
 
     # No model found - provide helpful error
-    available_files = [f.name for f in project_root.iterdir() 
-                      if f.suffix in ['.h5', '.keras'] or 'model' in f.name.lower()]
+    available_files = [
+        candidate.name
+        for candidate in project_root.iterdir()
+        if candidate.is_file() and candidate.suffix in [".h5", ".keras"]
+    ]
     
     raise FileNotFoundError(
         f"❌ No model file found! Checked: {[str(p) for p in model_paths]}\n"
         f"Available files: {available_files}\n"
+        "Keras 3 service artifacts must use .keras or .h5; re-export "
+        "TensorFlow SavedModel directories before use.\n"
         f"Please train the model first using: jupyter notebook model_training.ipynb"
     )
 

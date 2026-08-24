@@ -16,8 +16,8 @@ def test_docker_context_is_allowlisted_and_keeps_supported_artifacts():
         "!class_mapping.json",
         "!best_car_model.keras",
         "!car_classification_model.h5",
-        "!models/car_classification_savedmodel/**",
     }.issubset(rules)
+    assert not any("savedmodel" in rule.lower() for rule in rules)
 
 
 def test_runtime_image_drops_root_before_healthcheck_and_command():

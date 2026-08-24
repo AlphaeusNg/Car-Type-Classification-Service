@@ -1,4 +1,4 @@
-# Send only files that Dockerfile can consume. Keep every model shape supported
+# Send only files that Dockerfile can consume. Keep both model formats supported
 # by MODEL_PATH; all local environments, datasets, Git data, and experiments
 # remain outside the build context.
 **
@@ -9,6 +9,3 @@
 !class_mapping.json
 !best_car_model.keras
 !car_classification_model.h5
-!models/
-!models/car_classification_savedmodel/
-!models/car_classification_savedmodel/**

@@ -2,10 +2,10 @@
 
 This directory contains trained models and related files.
 
-## Files
+## Supported service artifacts
 
-- `car_classification_savedmodel/`: TensorFlow SavedModel format (preferred for deployment)
-- `car_classification_model.h5`: Keras HDF5 model file (fallback)
+- `../best_car_model.keras`: preferred Keras 3 model.
+- `../car_classification_model.h5`: legacy Keras HDF5 fallback.
 
 ## Model Information
 
@@ -16,11 +16,18 @@ This directory contains trained models and related files.
 
 ## Usage
 
-The API service will automatically load models from this directory. The loading priority is:
+The API service automatically loads supported artifacts from the repository
+root in this order:
 
-1. SavedModel format (`car_classification_savedmodel/`)
-2. HDF5 format (`car_classification_model.h5`)
+1. Keras v3 (`best_car_model.keras`)
+2. HDF5 (`car_classification_model.h5`)
 
 ## Note
 
-Model files are generated after running the training notebook and are not included in the repository due to size constraints.
+Keras 3 cannot load a TensorFlow SavedModel directory with `load_model()`. A
+legacy `car_classification_savedmodel/` directory may still be useful for
+TensorFlow Serving, but it is not a supported artifact for this API. Re-export
+it to `.keras` before local or Docker use.
+
+Model files are generated after running the training notebook and are not
+included in the repository due to size constraints.

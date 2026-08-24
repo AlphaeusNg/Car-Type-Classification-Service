@@ -32,6 +32,9 @@ data/train  data/test  # Stanford Cars images (large)
 - The current model artifacts require Keras 3.10.0; 3.11.3, 3.12.3, and
   3.15.0 fail real deserialization. Run a real artifact load/readiness smoke
   before changing this pin.
+- The service loader supports Keras v3 `.keras` and legacy `.h5` files. Keras 3
+  `load_model()` does not support TensorFlow SavedModel directories; re-export
+  those artifacts before service or Docker use.
 - Models and `data/` are heavy — don’t casually reformat or re-upload huge assets.
 - Prefer API changes in `api/` with small utilities; keep training experiments in notebooks unless promoting a new saved model.
 

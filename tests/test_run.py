@@ -5,6 +5,11 @@ import argparse
 import pytest
 
 import run
+from api.model_artifacts import MODEL_CANDIDATES
+
+
+def test_runner_uses_the_shared_supported_artifact_order():
+    assert run.MODEL_CANDIDATES is MODEL_CANDIDATES
 
 
 def test_model_discovery_matches_loader_preference(tmp_path):
@@ -28,11 +33,11 @@ def test_valid_port_rejects_invalid_values(value):
         run.valid_port(value)
 
 
-def test_model_discovery_accepts_savedmodel_directory(tmp_path):
+def test_model_discovery_rejects_keras3_incompatible_savedmodel_directory(tmp_path):
     saved_model = tmp_path / "models" / "car_classification_savedmodel"
     saved_model.mkdir(parents=True)
 
-    assert run.find_model_artifact(tmp_path) == saved_model
+    assert run.find_model_artifact(tmp_path) is None
 
 
 def test_model_discovery_returns_none_when_artifact_is_missing(tmp_path):
