@@ -1618,6 +1618,8 @@ server's request/disk work.
 - Fresh isolated resolution from `requirements-test.txt`: 105 tests passed
   warning-strict in 1.55s on the current pinned FastAPI/Starlette graph.
 - Isolated `pip-audit -r requirements-test.txt`: no known vulnerabilities.
+- Hosted CI run `32763931440` passed the Python 3.12 workflow policy, all 105
+  tests, dependency consistency, and compilation gates.
 
 **Scores (change-specific)**
 
