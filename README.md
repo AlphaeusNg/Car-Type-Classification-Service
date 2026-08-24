@@ -203,7 +203,6 @@ itself remains limited to 10 MiB.
 ```bash
 # Train model first
 jupyter notebook model_training.ipynb
-# Or use: python refactored_training.py
 ```
 
 **🚨 "Port already in use"**
@@ -235,7 +234,7 @@ export CUDA_VISIBLE_DEVICES=""
 
 **Core Requirements**
 - ✅ `model_training.ipynb` - Interactive training notebook
-- ✅ `refactored_training.py` - Production training script  
+- ✅ `prediction_example.py` - Validated standalone inference example
 - ✅ Stanford Cars dataset support (196 classes)
 - ✅ ResNet50 + transfer learning architecture
 - ✅ Complete training pipeline with metrics

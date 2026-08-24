@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-08-25 (service Cycle 34)
+Last updated: 2026-08-25 (service Cycle 35)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 34: 108 model-free tests cover the API boundary,
+- Baseline after Cycle 35: 109 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -30,6 +30,8 @@ Last updated: 2026-08-25 (service Cycle 34)
 - The standalone prediction example imports without TensorFlow and reuses the
   API's model/mapping compatibility, bounded EXIF-aware preprocessing, and
   probability-decoding contracts instead of maintaining a second inference path.
+- README inline Python entry points are checked against the working tree so
+  removed or never-shipped scripts cannot remain advertised.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
   production resolution has 17 Keras-only findings constrained by real model
   compatibility; the full training workspace now has the same Keras-only set.
@@ -39,6 +41,7 @@ Last updated: 2026-08-25 (service Cycle 34)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Remove and prevent nonexistent Python entry points in README | Documentation / DX | Low-medium: setup guidance advertised a training script that never shipped | Tiny / low | Reproduced missing path plus generic inline Python-reference contract | Completed in Cycle 35 |
 | — | Align the standalone prediction example with hardened API inference | Correctness / maintainability | Medium-high: the example eagerly loaded training state and bypassed mapping, image, shape, and probability validation | Small / low | Three model-free regressions plus real GPU model/sample execution | Completed in Cycle 34 |
 | — | Bound request bytes before multipart file spooling | Security / resources | Medium-high: the endpoint's 10 MiB read happened only after framework multipart parsing could spool an arbitrarily large file | Small / low | Declared-length and chunked receive tests plus all normal API requests | Completed in Cycle 33 |
 | — | Load inference artifacts without optimizer/training state | Reliability / performance | Low-medium | Small / low | Preferred/fallback loader options plus zero-delta real GPU prediction equivalence | Completed in Cycle 32 |
@@ -1714,3 +1717,36 @@ and the real ignored artifact before claiming parity.
 Keras re-export and representative equivalence corpus; do not attempt it as a
 pin-only change. Rotate to another repository until that migration authority
 and evidence are available.
+
+### Cycle 35 — Stop advertising a nonexistent training script (2026-08-25)
+
+**Why this won:** A workspace-wide missing-path scan found two README claims for
+`refactored_training.py`, including a troubleshooting command and a completed
+feature checkbox, but no such file exists. This was new concrete evidence after
+Cycle 34, small enough to close without prolonging a speculative code audit.
+
+**Changes**
+
+- Removed the nonexistent training command and replaced its false feature claim
+  with the real validated `prediction_example.py` entry point.
+- Added a reusable README contract that extracts inline Python paths and fails
+  when any advertised entry point is absent.
+
+**Verification evidence and scores**
+
+- Test-first: the new contract failed with exactly
+  `README references missing Python files: ['refactored_training.py']`.
+- The focused check passed after correction; the complete warning-strict suite
+  passed 109 tests in 1.39s, up from 108. Dependency consistency, compilation,
+  and CRLF-aware whitespace checks passed.
+- Correctness/docs: 3/10 → 10/10; verifiability: 2/10 → 9/10;
+  maintainability: 7/10 → 9/10; DX: 4/10 → 9/10. Runtime, model artifacts,
+  dependencies, performance, and security behavior are unchanged.
+
+**Lesson / process improvement:** Documentation reference checks should inspect
+the filesystem instead of freezing only today's known bad filename. A generic
+contract prevents the same class of drift when entry points are renamed later.
+
+**Next opportunity:** Force rotation now. The only remaining car-service item
+is the trusted Keras migration, which remains blocked on re-export authority and
+representative equivalence evidence.
