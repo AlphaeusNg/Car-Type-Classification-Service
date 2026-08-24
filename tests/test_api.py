@@ -340,6 +340,23 @@ def test_predict_rejects_unsupported_media_type(client, monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "declared_content_type",
+    ["Image/JPEG", "image/png; profile=srgb"],
+)
+def test_predict_accepts_case_insensitive_parameterized_image_media_type(
+    client, monkeypatch, declared_content_type
+):
+    make_ready(monkeypatch)
+
+    response = client.post(
+        "/predict",
+        files={"image": ("car", b"image", declared_content_type)},
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
     ("decoded_format", "claimed_content_type"),
     [("GIF", "image/jpeg"), ("WEBP", "image/png")],
 )

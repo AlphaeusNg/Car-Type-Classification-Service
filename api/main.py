@@ -187,7 +187,8 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
     if model is None or class_mapping is None:
         raise HTTPException(status_code=503, detail="Model is not ready")
 
-    if image.content_type not in ALLOWED_IMAGE_TYPES:
+    declared_image_type = (image.content_type or "").partition(";")[0].strip().lower()
+    if declared_image_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="File must be a JPEG or PNG image")
 
     image_data = await image.read(MAX_UPLOAD_BYTES + 1)
