@@ -4,13 +4,23 @@ Car Type Classification - Prediction Example
 Example code showing how to use the saved model for predictions.
 """
 
-import tensorflow as tf
-import numpy as np
-import json
-from PIL import Image
+from pathlib import Path
 
-def predict_car_type(image_path, model_path='best_car_model.keras', 
-                    mapping_path='class_mapping.json'):
+from api.utils import (
+    decode_predictions,
+    load_class_mapping,
+    preprocess_image,
+    validate_runtime_artifacts,
+)
+
+
+def predict_car_type(
+    image_path,
+    model_path="best_car_model.keras",
+    mapping_path="class_mapping.json",
+    *,
+    model_loader=None,
+):
     """
     Predict car type from image file
 
@@ -18,50 +28,29 @@ def predict_car_type(image_path, model_path='best_car_model.keras',
         image_path: Path to the car image
         model_path: Path to the trained model
         mapping_path: Path to class mapping JSON
+        model_loader: Optional Keras-compatible loader for testing
 
     Returns:
         Dictionary with prediction results
     """
-    # Load the saved model
-    model = tf.keras.models.load_model(model_path)
+    if model_loader is None:
+        import tensorflow as tf
 
-    # Load class mappings
-    with open(mapping_path, 'r') as f:
-        class_mapping = json.load(f)
+        model_loader = tf.keras.models.load_model
 
-    # Load and preprocess image
-    img = Image.open(image_path)
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
-
-    img = img.resize((224, 224))  # Resize to model input size
-    img_array = np.array(img) / 255.0  # Normalize to [0,1]
-    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-
-    # Make prediction
-    predictions = model.predict(img_array, verbose=0)
-    predicted_class_idx = np.argmax(predictions[0])
-    confidence = np.max(predictions[0])
-
-    # Get class name
-    predicted_class = class_mapping['index_to_class'][str(predicted_class_idx)]
-
-    # Get top 5 predictions
-    top5_indices = np.argsort(predictions[0])[-5:][::-1]
-    top5_predictions = [
-        {
-            'class': class_mapping['index_to_class'][str(idx)],
-            'confidence': float(predictions[0][idx])
-        }
-        for idx in top5_indices
+    model = model_loader(str(Path(model_path)), compile=False)
+    class_mapping = load_class_mapping(Path(mapping_path))
+    validate_runtime_artifacts(model, class_mapping)
+    image_array = preprocess_image(Path(image_path).read_bytes())
+    result = decode_predictions(
+        model.predict(image_array, verbose=0),
+        class_mapping["index_to_class"],
+    )
+    result["class_index"] = class_mapping["class_to_index"][
+        result["predicted_class"]
     ]
+    return result
 
-    return {
-        'predicted_class': predicted_class,
-        'confidence': float(confidence),
-        'class_index': int(predicted_class_idx),
-        'top5_predictions': top5_predictions
-    }
 
 # Example usage:
 if __name__ == "__main__":

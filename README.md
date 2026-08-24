@@ -102,6 +102,12 @@ artifact explicitly when it is not the default:
 docker build --build-arg MODEL_PATH=car_classification_model.h5 -t car-type-clf .
 ```
 
+For one local image without starting the API, update the sample path at the
+bottom of `prediction_example.py` and run `python3 prediction_example.py`.
+The example uses the same validated class mapping, JPEG/PNG pixel and EXIF
+preprocessing, model shape checks, probability decoder, and `compile=False`
+loading contract as the service.
+
 ## 🔌 API Usage
 
 ### Test the Service

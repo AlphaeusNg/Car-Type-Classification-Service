@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-08-25 (service Cycle 33)
+Last updated: 2026-08-25 (service Cycle 34)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 33: 105 model-free tests cover the API boundary,
+- Baseline after Cycle 34: 108 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -27,6 +27,9 @@ Last updated: 2026-08-25 (service Cycle 33)
 - Inference artifacts load with `compile=False`; the real preferred `.keras`
   artifact preserves identical 196-class predictions without restoring unused
   optimizer state or emitting its variable-mismatch warning.
+- The standalone prediction example imports without TensorFlow and reuses the
+  API's model/mapping compatibility, bounded EXIF-aware preprocessing, and
+  probability-decoding contracts instead of maintaining a second inference path.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
   production resolution has 17 Keras-only findings constrained by real model
   compatibility; the full training workspace now has the same Keras-only set.
@@ -36,6 +39,7 @@ Last updated: 2026-08-25 (service Cycle 33)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Align the standalone prediction example with hardened API inference | Correctness / maintainability | Medium-high: the example eagerly loaded training state and bypassed mapping, image, shape, and probability validation | Small / low | Three model-free regressions plus real GPU model/sample execution | Completed in Cycle 34 |
 | — | Bound request bytes before multipart file spooling | Security / resources | Medium-high: the endpoint's 10 MiB read happened only after framework multipart parsing could spool an arbitrarily large file | Small / low | Declared-length and chunked receive tests plus all normal API requests | Completed in Cycle 33 |
 | — | Load inference artifacts without optimizer/training state | Reliability / performance | Low-medium | Small / low | Preferred/fallback loader options plus zero-delta real GPU prediction equivalence | Completed in Cycle 32 |
 | — | Require confidence outputs to be probabilities | Correctness / robustness | Medium-high: arbitrary finite logits were labeled and returned as confidence | Small / low | Five decoder/API regressions plus real 196-class prediction | Completed in Cycle 31 |
@@ -1642,3 +1646,71 @@ bytes separately.
 and sync verification for a small technical reliability gain that does not
 require changing the owner's note content. The Keras migration remains blocked
 until trusted re-export and representative equivalence evidence are available.
+
+### Cycle 34 — Unify standalone and API inference contracts (2026-08-25)
+
+**Why this won:** The Keras re-export remained externally constrained, but the
+documented `prediction_example.py` was a second, weaker inference stack. It
+eagerly imported TensorFlow, restored training state, ignored EXIF/decoded-format
+and pixel limits, trusted raw mapping JSON and model shapes, and ranked arbitrary
+scores as confidence. Users following the example did not receive the safety
+properties claimed by the service.
+
+**Plan and success criteria**
+
+1. Reproduce eager TensorFlow import and unvalidated example inference without
+   loading trained weights.
+2. Give API startup and the example one model/mapping compatibility function.
+3. Reuse bounded image preprocessing and probability decoding while preserving
+   the example's return shape, including `class_index`.
+4. Run the complete warning-strict suite and execute the refactored script with
+   the real ignored artifact and sample image.
+
+**Changes**
+
+- Moved `validate_runtime_artifacts` into `api.utils`; `api.main` imports the
+  same symbol, preserving its startup behavior and existing test surface.
+- Made TensorFlow a lazy dependency of `prediction_example.py` and load the
+  explicit artifact with `compile=False`.
+- Routed mapping load, model shape checks, byte-based JPEG/PNG preprocessing,
+  EXIF orientation, pixel limits, output validation, and top-five ranking
+  through the production helpers.
+- Added an injectable loader only for model-free verification and retained the
+  documented `class_index` by using the validated inverse mapping.
+- Added three regressions and documented that standalone inference now shares
+  the service contract.
+
+**Verification evidence**
+
+- Test-first: all three new tests failed. The subprocess caught an eager
+  TensorFlow import, and both functional cases found no injectable/shared path.
+- Focused API/utility/example verification: 86 passed. The complete
+  `.venv/bin/python -m pytest -q -W error` gate passed 108 tests in 1.47s, up
+  from 105; `pip check`, full compilation, and CRLF-aware diff checks passed.
+- The real Keras 3.10 `.keras` artifact loaded with `compile=False` on the local
+  RTX 4060 and processed the checked-in sample through the refactored script.
+  It returned five valid probabilities headed by
+  `Dodge Challenger SRT8 2011` at 87.07% confidence.
+- Artifact bytes, dependency pins, API response shape, and the blocked Keras
+  migration were unchanged.
+
+**Scores (change-specific)**
+
+| Dimension | Before | After | Evidence |
+|---|---:|---:|---|
+| Correctness / reliability | 3/10 | 10/10 | Example and API enforce the same image, artifact, mapping, and score semantics |
+| Test coverage / verifiability | 2/10 | 10/10 | Lightweight import, fake inference, invalid scores, API regression, and real GPU path pass |
+| Maintainability | 4/10 | 9/10 | One shared compatibility validator and existing helpers replace duplicated inference logic |
+| Performance / resources | 6/10 | 9/10 | Import is lightweight and unused optimizer state is no longer restored |
+| Security / robustness | 4/10 | 9/10 | The example now inherits decoded-image and malformed-output fail-closed boundaries |
+| Developer experience | 4/10 | 9/10 | Documented direct inference behaves like the production endpoint |
+
+**Lesson / process improvement:** Examples are production interfaces when users
+copy or run them. Treat every example as a consumer of the canonical domain
+functions, make heavy imports lazy, and verify both a dependency-free fake path
+and the real ignored artifact before claiming parity.
+
+**Next opportunity:** The remaining car-service priority is still the trusted
+Keras re-export and representative equivalence corpus; do not attempt it as a
+pin-only change. Rotate to another repository until that migration authority
+and evidence are available.

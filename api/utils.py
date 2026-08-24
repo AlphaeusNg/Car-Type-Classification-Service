@@ -214,6 +214,61 @@ def validate_class_mapping(class_mapping: Any) -> Dict[str, Any]:
     return class_mapping
 
 
+def validate_runtime_artifacts(loaded_model, loaded_mapping):
+    """Reject model/mapping pairs incompatible with shared preprocessing."""
+    validate_class_mapping(loaded_mapping)
+    index_to_class = loaded_mapping["index_to_class"]
+
+    input_shape = getattr(loaded_model, "input_shape", None)
+    if not isinstance(input_shape, (tuple, list)) or not input_shape:
+        raise ValueError("model must expose a single input shape")
+    if isinstance(input_shape[0], (tuple, list)):
+        raise ValueError("multi-input models are not supported")
+    if len(input_shape) != len(PREPROCESSED_IMAGE_SHAPE):
+        raise ValueError("model input shape must have rank 4")
+    for actual, expected in zip(input_shape, PREPROCESSED_IMAGE_SHAPE):
+        if actual is None:
+            continue
+        try:
+            actual = int(actual)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "model input dimensions must be known or dynamic"
+            ) from exc
+        if actual != expected:
+            raise ValueError(
+                f"model input shape {input_shape} does not accept "
+                f"preprocessed shape {PREPROCESSED_IMAGE_SHAPE}"
+            )
+
+    output_shape = getattr(loaded_model, "output_shape", None)
+    if not isinstance(output_shape, (tuple, list)) or not output_shape:
+        raise ValueError("model must expose a single output shape")
+    if isinstance(output_shape[0], (tuple, list)):
+        raise ValueError("multi-output models are not supported")
+    if len(output_shape) != 2:
+        raise ValueError("model output shape must have rank 2")
+    output_batch = output_shape[0]
+    if output_batch is not None:
+        try:
+            output_batch = int(output_batch)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "model output batch dimension must be known or dynamic"
+            ) from exc
+        if output_batch != 1:
+            raise ValueError("model output must describe one score row per image")
+    try:
+        output_width = int(output_shape[-1])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("model output width must be known") from exc
+    if output_width <= 0:
+        raise ValueError("model output width must be positive")
+
+    if len(index_to_class) != output_width:
+        raise ValueError("model output width does not match class mapping")
+
+
 def load_class_mapping(mapping_path: Path | None = None) -> Dict[str, Any]:
     """
     Load class mapping for car types
