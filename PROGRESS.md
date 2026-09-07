@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-08-25 (service Cycle 37)
+Last updated: 2026-09-08 (service Cycle 38)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 37: 113 model-free tests cover the API boundary,
+- Baseline after Cycle 38: 114 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -80,6 +80,22 @@ Last updated: 2026-08-25 (service Cycle 37)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 38 — Keep Docker troubleshooting scoped (2026-09-08)
+
+**Why this won:** The service and all 113 existing model-free contracts were
+healthy, but the troubleshooting guide told operators to run `docker system
+prune -a`. That host-wide command can remove unrelated stopped containers,
+images, networks, and build cache when only this service needs diagnosis.
+
+**Changes and verification**
+
+- Replaced host-wide cleanup with service-container logs and a verbose,
+  no-cache rebuild of this image.
+- Added a README contract that rejects the broad prune command and requires the
+  two scoped diagnostics.
+- Test-first proof: the focused README suite failed on the old command, then
+  the full model-free suite passed with 114 tests.
 
 ### Cycle 37 — Remove the impossible SavedModel deployment path (2026-08-25)
 

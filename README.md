@@ -220,9 +220,13 @@ python run.py --setup  # Reset environment
 
 **🚨 "Docker problems"**
 ```bash
-docker system prune -a  # Clear cache
-docker build --no-cache -t car-classification-service .
+docker logs car-classification-service
+docker build --progress=plain --no-cache -t car-classification-service .
 ```
+
+Inspect the service container and rebuild this image before removing Docker
+resources. Avoid host-wide cleanup commands: they can delete unrelated stopped
+containers, unused images, networks, and build cache.
 
 ### GPU Setup (Optional)
 ```bash
