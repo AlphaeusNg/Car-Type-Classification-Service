@@ -50,6 +50,7 @@ def test_audited_runtime_and_test_pins_stay_aligned():
     expected = {
         "fastapi": "0.139.2",
         "starlette": "1.6.0",
+        "anyio": "4.14.2",
         "python-multipart": "0.0.32",
         "pillow": "12.3.0",
         "keras": "3.10.0",

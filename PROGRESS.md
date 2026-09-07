@@ -3,7 +3,7 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-08 (service Cycle 38)
+Last updated: 2026-09-08 (service Cycle 39)
 
 ## Current state
 
@@ -80,6 +80,22 @@ Last updated: 2026-09-08 (service Cycle 38)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 39 — Pin the warning-clean AnyIO boundary (2026-09-08)
+
+**Why this won:** Hosted CI resolved newly released AnyIO 4.15.1 beneath the
+pinned Starlette 1.6.0. Starlette's test client still references the
+`anyio.abc.BlockingPortal` compatibility alias, which AnyIO now deprecates, so
+the warning-strict test gate failed during collection despite the local suite
+being green on AnyIO 4.9.0.
+
+**Changes and verification**
+
+- Pin AnyIO 4.14.2 consistently in production, training, and lightweight test
+  manifests until Starlette moves to the canonical `anyio.from_thread` type.
+- Extend dependency-alignment coverage so one manifest cannot drift.
+- Verify a clean isolated install with warnings treated as errors, then rerun
+  all 114 model-free tests and dependency consistency checks.
 
 ### Cycle 38 — Keep Docker troubleshooting scoped (2026-09-08)
 
