@@ -19,3 +19,28 @@ def test_docker_troubleshooting_avoids_host_wide_cleanup():
     assert "docker system prune" not in readme
     assert "docker logs car-classification-service" in readme
     assert "docker build --progress=plain --no-cache" in readme
+
+
+def test_readme_license_matches_committed_license():
+    readme = Path("README.md").read_text(encoding="utf-8")
+    license_text = Path("LICENSE").read_text(encoding="utf-8")
+    license_heading = re.search(
+        r"^\s*GNU GENERAL PUBLIC LICENSE\s*$",
+        license_text,
+        flags=re.MULTILINE,
+    )
+    license_version = re.search(r"^\s*Version (\d+),", license_text, flags=re.MULTILINE)
+    readme_section = re.search(
+        r"^## 📄 License\s*$(.*?)(?=^## |\Z)",
+        readme,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+
+    assert license_heading, "LICENSE should identify the GNU GPL"
+    assert license_version, "LICENSE should declare its major version"
+    assert readme_section, "README should contain a License section"
+
+    expected = f"GNU General Public License v{license_version.group(1)}.0"
+    declaration = readme_section.group(1)
+    assert expected in declaration
+    assert "MIT License" not in declaration

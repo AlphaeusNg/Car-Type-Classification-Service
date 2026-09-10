@@ -275,7 +275,7 @@ export CUDA_VISIBLE_DEVICES=""
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file
+GNU General Public License v3.0 — see the [LICENSE](LICENSE) file.
 
 ## 🙏 Credits
 

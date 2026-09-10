@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-08 (service Cycle 39)
+Last updated: 2026-09-11 (service Cycle 40)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 38: 114 model-free tests cover the API boundary,
+- Baseline after Cycle 40: 115 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -37,6 +37,8 @@ Last updated: 2026-09-08 (service Cycle 39)
   probability-decoding contracts instead of maintaining a second inference path.
 - README inline Python entry points are checked against the working tree so
   removed or never-shipped scripts cannot remain advertised.
+- README licensing now matches the committed GNU General Public License v3.0,
+  with a contract that derives the expected major version from `LICENSE`.
 - Dependency audit: the lightweight test graph has zero known vulnerabilities;
   production resolution has 17 Keras-only findings constrained by real model
   compatibility; the full training workspace now has the same Keras-only set.
@@ -46,6 +48,7 @@ Last updated: 2026-09-08 (service Cycle 39)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Keep the README license declaration aligned with `LICENSE` | Legal / documentation | High: the README advertised MIT while the repository ships GNU GPL v3 | Tiny / low | Contract derives the expected GPL major version from the committed license text | Completed in Cycle 40 |
 | — | Stop advertising Keras-3-incompatible SavedModel deployment | Correctness / deploy reliability | High: a documented launcher/API/Docker artifact could never load under the pinned runtime | Small / low | Real Keras 3.10 failure, official format contract, two real supported-artifact predictions, and model-free regressions | Completed in Cycle 37 |
 | — | Accept standards-valid image media-type syntax | Correctness / robustness | Low-medium: raw case-sensitive comparison rejected valid JPEG/PNG multipart metadata | Tiny / low | Two endpoint regressions cover mixed case and parameters without weakening decoded-format validation | Completed in Cycle 36 |
 | — | Remove and prevent nonexistent Python entry points in README | Documentation / DX | Low-medium: setup guidance advertised a training script that never shipped | Tiny / low | Reproduced missing path plus generic inline Python-reference contract | Completed in Cycle 35 |
@@ -80,6 +83,22 @@ Last updated: 2026-09-08 (service Cycle 39)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 40 — Align the public license declaration (2026-09-11)
+
+**Why this won:** The repository's authoritative `LICENSE` file contains the GNU
+General Public License version 3, while the README told users the project used
+the materially different MIT License. That contradiction could mislead anyone
+evaluating, redistributing, or modifying the service.
+
+**Changes and verification**
+
+- Corrected the README to identify GNU General Public License v3.0 and retain a
+  direct link to the authoritative license text.
+- Added a regression that reads the committed license header and version,
+  derives the expected README declaration, and rejects a stale MIT claim.
+- Ran the complete warning-strict model-free suite, dependency consistency,
+  Python compilation, and whitespace checks before shipping: 115 tests passed.
 
 ### Cycle 39 — Pin the warning-clean AnyIO boundary (2026-09-08)
 
