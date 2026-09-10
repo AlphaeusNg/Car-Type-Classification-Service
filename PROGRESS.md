@@ -3,24 +3,25 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-11 (service Cycle 40)
+Last updated: 2026-09-11 (service Cycle 41)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 40: 115 model-free tests cover the API boundary,
+- Baseline after Cycle 41: 117 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
   Request-level concurrency coverage
   proves slow synchronous inference stays off the event loop and shared model
   access is serialized; callers wait at most five seconds for the model lane
-  before receiving explicit retryable overload behavior. Image preprocessing is
-  independently limited to two workers with a one-second queue bound, recovery
-  after invalid input, and explicit retry semantics. Nineteen CI policy
-  assertions keep the complete lightweight gate on supported action runtimes
-  without TensorFlow or trained weights.
+  before receiving HTTP 503 with `Retry-After: 5`. That retry hint is absent
+  from success, validation, readiness, and model-not-ready responses. Image
+  preprocessing is independently limited to two workers with a one-second
+  queue bound, recovery after invalid input, and explicit retry semantics.
+  Nineteen CI policy assertions keep the complete lightweight gate on
+  supported action runtimes without TensorFlow or trained weights.
 - `/predict` request bodies are bounded before multipart parsing/spooling by
   both declared length and actual receive-stream bytes; the 10 MiB image limit
   retains a separate 64 KiB multipart-envelope allowance. Standards-valid
@@ -48,6 +49,7 @@ Last updated: 2026-09-11 (service Cycle 40)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Echo the model-lane wait on overload 503 via `Retry-After` | API contract / DX | Low-medium: callers already waited five seconds, but only overload responses should advertise that retry delay | Tiny / low | Header present on model-lane 503, absent on 200/422 and non-overload 503s | Completed in Cycle 41 |
 | — | Keep the README license declaration aligned with `LICENSE` | Legal / documentation | High: the README advertised MIT while the repository ships GNU GPL v3 | Tiny / low | Contract derives the expected GPL major version from the committed license text | Completed in Cycle 40 |
 | — | Stop advertising Keras-3-incompatible SavedModel deployment | Correctness / deploy reliability | High: a documented launcher/API/Docker artifact could never load under the pinned runtime | Small / low | Real Keras 3.10 failure, official format contract, two real supported-artifact predictions, and model-free regressions | Completed in Cycle 37 |
 | — | Accept standards-valid image media-type syntax | Correctness / robustness | Low-medium: raw case-sensitive comparison rejected valid JPEG/PNG multipart metadata | Tiny / low | Two endpoint regressions cover mixed case and parameters without weakening decoded-format validation | Completed in Cycle 36 |
@@ -83,6 +85,27 @@ Last updated: 2026-09-11 (service Cycle 40)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 41 — Advertise the model-lane wait on overload 503 (2026-09-11)
+
+**Why this won:** Cycle 29 already bounded model-lane acquisition at five
+seconds and returned a retryable 503, but the HTTP contract did not isolate
+that `Retry-After: 5` hint from success, validation, or other unavailable
+responses. Clients retrying every 503, or treating 200/422 as retryable, would
+misread capacity.
+
+**Changes and verification**
+
+- Kept `Retry-After` on the model-lane overload 503 only, matching
+  `PREDICTION_RETRY_AFTER_SECONDS` / the five-second queue wait. Readiness and
+  model-not-ready 503s stay header-free.
+- Added model-free regressions: header present on overload 503, absent on
+  200/422, and absent on non-overload 503s. The existing synchronized overload
+  path now also requires successful completions to omit the header.
+- README already documents `Retry-After: 5` in prose and has no status-code
+  table, so the public API usage guide was left unchanged.
+- Ran the complete warning-strict model-free suite, dependency consistency,
+  Python compilation, and whitespace checks before shipping: 117 tests passed.
 
 ### Cycle 40 — Align the public license declaration (2026-09-11)
 

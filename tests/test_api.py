@@ -533,10 +533,52 @@ def test_predict_bounds_queue_wait_without_abandoning_active_inference(monkeypat
 
     assert overloaded_response.status_code == 503
     assert overloaded_response.json() == {"detail": "Prediction queue is busy; retry later"}
-    assert overloaded_response.headers["retry-after"] == "5"
+    assert overloaded_response.headers["retry-after"] == str(api.PREDICTION_RETRY_AFTER_SECONDS)
     assert first_response.status_code == 200
+    assert "retry-after" not in first_response.headers
     assert recovered_response.status_code == 200
+    assert "retry-after" not in recovered_response.headers
     assert loaded_model.max_active_predictions == 1
+
+
+def test_predict_retry_after_header_only_on_model_lane_overload(client, monkeypatch):
+    make_ready(monkeypatch)
+    assert api.PREDICTION_RETRY_AFTER_SECONDS == int(api.PREDICTION_QUEUE_TIMEOUT_SECONDS)
+
+    success = client.post(
+        "/predict",
+        files={"image": ("car.png", b"image", "image/png")},
+    )
+    validation = client.post("/predict")
+
+    monkeypatch.setattr(api, "prediction_semaphore", asyncio.Semaphore(0))
+    monkeypatch.setattr(api, "PREDICTION_QUEUE_TIMEOUT_SECONDS", 0.01)
+    overloaded = client.post(
+        "/predict",
+        files={"image": ("car.png", b"image", "image/png")},
+    )
+
+    assert success.status_code == 200
+    assert "retry-after" not in success.headers
+    assert validation.status_code == 422
+    assert "retry-after" not in validation.headers
+    assert overloaded.status_code == 503
+    assert overloaded.json() == {"detail": "Prediction queue is busy; retry later"}
+    assert overloaded.headers["retry-after"] == str(api.PREDICTION_RETRY_AFTER_SECONDS)
+
+
+def test_non_overload_unavailable_responses_omit_retry_after(client):
+    health = client.get("/health")
+    not_ready = client.post(
+        "/predict",
+        files={"image": ("car.png", b"image", "image/png")},
+    )
+
+    assert health.status_code == 503
+    assert "retry-after" not in health.headers
+    assert not_ready.status_code == 503
+    assert not_ready.json()["detail"] == "Model is not ready"
+    assert "retry-after" not in not_ready.headers
 
 
 def test_predict_bounds_image_processing_concurrency_and_recovers(monkeypatch):
