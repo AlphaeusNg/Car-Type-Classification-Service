@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-11 (service Cycle 41)
+Last updated: 2026-09-12 (service Cycle 42)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 41: 117 model-free tests cover the API boundary,
+- Baseline after Cycle 42: 117 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -40,15 +40,18 @@ Last updated: 2026-09-11 (service Cycle 41)
   removed or never-shipped scripts cannot remain advertised.
 - README licensing now matches the committed GNU General Public License v3.0,
   with a contract that derives the expected major version from `LICENSE`.
-- Dependency audit: the lightweight test graph has zero known vulnerabilities;
-  production resolution has 17 Keras-only findings constrained by real model
-  compatibility; the full training workspace now has the same Keras-only set.
+- Dependency audit: workspace and test `httpx2` is pinned at 2.12.0; the
+  lightweight test graph has zero known vulnerabilities. Production
+  `requirements-api.txt` does not include httpx2. Remaining advisories are the
+  Keras 3.10.0 set (16 unique GHSAs duplicated across workspace and API
+  manifests), constrained by real model compatibility.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 17 advisory records, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 16 unique advisory records duplicated across two manifests, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Pin httpx2 2.12.0 on workspace and test manifests | Security / maintenance | High: Dependabot flagged decompression-bomb, smuggling, multipart, SSE, and SOCKS-WSS advisories on 2.7.0 | Tiny / low | Aligned workspace/test pins plus requirements contract | Completed in Cycle 42 |
 | — | Echo the model-lane wait on overload 503 via `Retry-After` | API contract / DX | Low-medium: callers already waited five seconds, but only overload responses should advertise that retry delay | Tiny / low | Header present on model-lane 503, absent on 200/422 and non-overload 503s | Completed in Cycle 41 |
 | — | Keep the README license declaration aligned with `LICENSE` | Legal / documentation | High: the README advertised MIT while the repository ships GNU GPL v3 | Tiny / low | Contract derives the expected GPL major version from the committed license text | Completed in Cycle 40 |
 | — | Stop advertising Keras-3-incompatible SavedModel deployment | Correctness / deploy reliability | High: a documented launcher/API/Docker artifact could never load under the pinned runtime | Small / low | Real Keras 3.10 failure, official format contract, two real supported-artifact predictions, and model-free regressions | Completed in Cycle 37 |
@@ -85,6 +88,21 @@ Last updated: 2026-09-11 (service Cycle 41)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 42 — Pin httpx2 2.12.0 (2026-09-12)
+
+**Why this won:** GitHub Dependabot opened ten httpx2 alerts (workspace plus
+test manifests) covering decompression amplification, request smuggling,
+multipart header injection, quadratic SSE buffering, and plaintext `wss`
+through SOCKS. Production Docker uses `requirements-api.txt` and does not
+install httpx2; the workspace/test client still needed the patched pin.
+
+**Changes and verification**
+
+- Raised `httpx2` from 2.7.0 to 2.12.0 in `requirements.txt` and
+  `requirements-test.txt`. Keras remains 3.10.0.
+- Updated the requirements-alignment contract to expect 2.12.0.
+- Ran `python3 -m pytest tests/test_requirements.py -q` before shipping.
 
 ### Cycle 41 — Advertise the model-lane wait on overload 503 (2026-09-11)
 

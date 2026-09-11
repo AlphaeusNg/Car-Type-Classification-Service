@@ -62,7 +62,7 @@ def test_audited_runtime_and_test_pins_stay_aligned():
             assert api[name] == version
         if name != "keras":
             assert tests[name] == version
-    assert tests["httpx2"] == "2.7.0"
+    assert tests["httpx2"] == "2.12.0"
     assert workspace["httpx2"] == tests["httpx2"]
     assert "httpx" not in tests
 
