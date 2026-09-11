@@ -28,7 +28,8 @@ def test_ci_workflow_policy():
     )
     assert "python -m pip check" in WORKFLOW
     assert (
-        "python -m compileall -q api tests run.py prediction_example.py" in WORKFLOW
+        "python -m compileall -q api tests tools run.py prediction_example.py"
+        in WORKFLOW
     )
     assert "actions/checkout@v4" not in WORKFLOW
     assert "actions/setup-python@v5" not in WORKFLOW

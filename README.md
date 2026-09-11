@@ -21,6 +21,7 @@ This service classifies car images into 196 different car types using transfer l
 │   ├── main.py                   #   └── REST API endpoints
 │   └── utils.py                  #   └── Model utilities
 ├── run.py                        # ⚡ One-command setup & deploy
+├── tools/train_optimized.py      # 🧪 Isolated EfficientNet candidate training
 ├── requirements.txt              # 📦 Python dependencies
 ├── README.md                     # 📄Documentation
 ├── Dockerfile                    # 🐳 Container configuration
@@ -50,7 +51,30 @@ python3 run.py --setup  # Auto-installs everything
 # Jupyter Notebook (Interactive)
 jupyter notebook model_training.ipynb
 
+# Or create a named, isolated EfficientNetV2 candidate (GPU by default)
+python3 tools/train_optimized.py --train --run-name efficientnet-candidate-1
+
 ```
+
+The command-line trainer writes only to the ignored
+`training_runs/<run-name>/` directory and refuses to reuse an existing run
+name. It never replaces `best_car_model.keras`. Checkpoint selection uses
+validation accuracy; the test split is evaluated afterward for reporting only.
+Review the run's `metrics.json`, compatibility, and representative prediction
+equivalence separately before any manual deployment decision.
+
+Training requires a detected GPU by default and uses mixed precision there.
+For an intentionally slower CPU run, opt in explicitly with `--allow-cpu`; the
+tool then uses float32. `--batch-size` defaults to 16 to keep memory demand
+reasonable. To evaluate an existing isolated checkpoint, use:
+
+```bash
+python3 tools/train_optimized.py --evaluate-run efficientnet-candidate-1
+```
+
+Add `--allow-cpu` to that command when evaluating without a GPU. The legacy
+tracked `training_history.json` records experiment history and is not proof
+that the corresponding candidate was deployed.
 
 ### 3. Start API
 ```bash
@@ -65,7 +89,7 @@ That's it! API runs at **http://localhost:8000** 🎉
 ```bash
 python3 -m pytest -q -W error
 python3 -m pip check
-python3 -m compileall -q api tests run.py prediction_example.py
+python3 -m compileall -q api tests tools run.py prediction_example.py
 ```
 
 The tests use a lightweight fake predictor, so trained model files are not
@@ -190,7 +214,7 @@ itself remains limited to 10 MiB.
 1. **Phase 1** (~25 epochs): Frozen backbone + train classifier
 2. **Phase 2** (~15 epochs): Fine-tune top layers with lower LR
 
-### Performance Metrics
+### Deployed ResNet Performance Metrics
 | Metric | Score |
 |--------|-------|
 | Training Accuracy | 99%+ |

@@ -43,6 +43,9 @@ gpu_setup_guide.ipynb
 model_training.ipynb
 training_history.pkl
 training_plots_*.png
+training_run/
+training_runs/
+best_car_model.previous.keras
 
 # Data files
 data/train/

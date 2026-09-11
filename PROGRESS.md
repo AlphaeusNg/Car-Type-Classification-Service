@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-12 (service Cycle 42)
+Last updated: 2026-09-12 (service Cycle 43)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 42: 117 model-free tests cover the API boundary,
+- Baseline after Cycle 43: 132 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -40,6 +40,9 @@ Last updated: 2026-09-12 (service Cycle 42)
   removed or never-shipped scripts cannot remain advertised.
 - README licensing now matches the committed GNU General Public License v3.0,
   with a contract that derives the expected major version from `LICENSE`.
+- The optional EfficientNetV2 trainer is an explicit, isolated experiment
+  path: it imports without TensorFlow, selects only on validation accuracy,
+  reports test results without promotion, and cannot write the deployed model.
 - Dependency audit: workspace and test `httpx2` is pinned at 2.12.0; the
   lightweight test graph has zero known vulnerabilities. Production
   `requirements-api.txt` does not include httpx2. Remaining advisories are the
@@ -51,6 +54,7 @@ Last updated: 2026-09-12 (service Cycle 42)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 16 unique advisory records duplicated across two manifests, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Isolate and fail-safe the optional EfficientNet trainer | Training safety / reproducibility | High: the draft could select deployment from test accuracy and overwrite the deployed artifact automatically | Medium / low | Model-free CLI/path/source contracts plus preserved experiment evidence | Completed in Cycle 43 |
 | — | Pin httpx2 2.12.0 on workspace and test manifests | Security / maintenance | High: Dependabot flagged decompression-bomb, smuggling, multipart, SSE, and SOCKS-WSS advisories on 2.7.0 | Tiny / low | Aligned workspace/test pins plus requirements contract | Completed in Cycle 42 |
 | — | Echo the model-lane wait on overload 503 via `Retry-After` | API contract / DX | Low-medium: callers already waited five seconds, but only overload responses should advertise that retry delay | Tiny / low | Header present on model-lane 503, absent on 200/422 and non-overload 503s | Completed in Cycle 41 |
 | — | Keep the README license declaration aligned with `LICENSE` | Legal / documentation | High: the README advertised MIT while the repository ships GNU GPL v3 | Tiny / low | Contract derives the expected GPL major version from the committed license text | Completed in Cycle 40 |
@@ -88,6 +92,68 @@ Last updated: 2026-09-12 (service Cycle 42)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 43 — Isolate candidate training from deployment (2026-09-12)
+
+**Why this won:** A recovered local EfficientNetV2 experiment had completed
+without replacing the deployed model, but its draft script could automatically
+copy a later candidate over `best_car_model.keras` based on test accuracy. It
+also applied both explicit `[-1, 1]` scaling and EfficientNetV2's default input
+preprocessing, used mixed float16 on CPU, and replaced the root history file on
+every run. Those are correctness and artifact-safety risks independent of the
+still-blocked Keras migration.
+
+**Changes**
+
+- Preserved the completed first run's 52-epoch experimental trace in
+  `training_history.json`. That run reported 94.10% validation accuracy but
+  only 43.08% test accuracy, so it is evidence of a generalization gap, not a
+  deployment candidate. An overlapping external retry was stopped after it was
+  found still using the unsafe no-argument draft; its partially rewritten
+  checkpoint and logs remain ignored under `training_run/` for forensic context
+  and must not be evaluated or promoted.
+- Reworked `tools/train_optimized.py` into an explicitly selected `--train` or
+  `--evaluate-run` tool. New runs are single-component names below the ignored
+  `training_runs/` root, reject collisions, and write history/metrics/status
+  beside their checkpoint.
+- Removed all deployed-model and backup paths from the tool. Validation
+  accuracy alone selects the candidate checkpoint; test evaluation is marked
+  final-report-only and cannot cause promotion.
+- Kept serving input at RGB `[0, 1]`, applied one in-graph conversion to
+  `[-1, 1]`, and set `include_preprocessing=False` on EfficientNetV2S.
+- Made TensorFlow lazy, reduced the default batch size from 32 to 16, retained
+  mixed precision only when a GPU is detected, and require `--allow-cpu` before
+  slow float32 CPU work.
+- Added 15 model-free contracts for lazy import, explicit CLI operations,
+  bounded run names/outputs, one preprocessing contract, report-only test
+  metrics, CPU/GPU policy, clean status transitions, and absence of any
+  deployed-artifact write target. CI now compiles the training tool alongside
+  the API, tests, launcher, and prediction example.
+
+**Verification evidence**
+
+- Test-first: the first 12 new contracts all failed against the recovered draft,
+  including an actual eager TensorFlow import; all 15 final contracts pass.
+- `python3 tools/train_optimized.py --help` and Python compilation complete
+  without loading or executing TensorFlow. No training or model evaluation was
+  launched during this cycle.
+- The externally started retry was terminated before it could reach the draft's
+  automatic promotion step. The deployed `best_car_model.keras` remains
+  byte-identical at SHA-256
+  `063563f2ff61ccb60bc40bd19d5fdcc19e3a6a581674071b5737910f1b6200fc`;
+  the interrupted `training_run/best_val.keras` is incomplete and remains
+  ignored. This cycle launched no training or model evaluation.
+
+**Lesson / process improvement:** Treat training, candidate selection, test
+reporting, and deployment as separate authority boundaries. A test split is a
+final report, not a promotion signal; a training command should never acquire
+deployment authority merely because a metric crosses a hard-coded threshold.
+
+**Next opportunity:** The Keras migration still needs explicit artifact
+re-export authority and representative equivalence evidence. Separately, the
+recovered candidate's validation/test gap should be investigated before any
+further expensive training, preferably by auditing split provenance and class
+coverage rather than tuning against the test score.
 
 ### Cycle 42 — Pin httpx2 2.12.0 (2026-09-12)
 

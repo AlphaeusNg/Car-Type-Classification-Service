@@ -32,4 +32,4 @@ jobs:
       - name: Dependency consistency
         run: python -m pip check
       - name: Python syntax
-        run: python -m compileall -q api tests run.py prediction_example.py
+        run: python -m compileall -q api tests tools run.py prediction_example.py
