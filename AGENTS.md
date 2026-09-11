@@ -7,7 +7,10 @@
 
 ## Purpose
 
-Classify car images into **196 Stanford Cars** types via ResNet50 transfer learning. Exposes a FastAPI `/predict` endpoint; includes training notebooks and Docker packaging.
+Classify car images into **196 Stanford Cars** types via EfficientNetV2-S
+transfer learning (ResNet50 remains the documented original notebook path).
+Exposes a FastAPI `/predict` endpoint; includes training notebooks, an isolated
+`tools/train_optimized.py` candidate trainer, and Docker packaging.
 
 ## Structure
 

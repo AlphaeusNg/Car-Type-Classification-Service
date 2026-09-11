@@ -223,40 +223,26 @@ def get_augmenters() -> tuple[Any, ...]:
     global _AUGMENTERS
     if _AUGMENTERS is None:
         _AUGMENTERS = (
-            layers.RandomCrop(IMAGE_SIZE, IMAGE_SIZE),
             layers.RandomFlip("horizontal"),
-            layers.RandomRotation(0.03),
-            layers.RandomContrast(0.15),
+            layers.RandomContrast(0.08),
         )
     return _AUGMENTERS
 
 
-def augment_batch(images: Any, labels: Any) -> tuple[Any, Any]:
-    crop, flip, rotation, contrast = get_augmenters()
-    images = crop(images, training=True)
-    images = flip(images, training=True)
-    images = rotation(images, training=True)
-    images = contrast(images, training=True)
-    images = tf.image.random_brightness(images, 0.1)
-    images = tf.image.random_saturation(images, 0.9, 1.1)
-    images = tf.cast(tf.clip_by_value(images, 0.0, 255.0) / 255.0, tf.float32)
-    return images, tf.cast(labels, tf.float32)
-
-
-def center_resize(images: Any, labels: Any) -> tuple[Any, Any]:
-    images = tf.image.resize(images, (IMAGE_SIZE, IMAGE_SIZE))
+def to_unit_interval(images: Any, labels: Any) -> tuple[Any, Any]:
     return tf.cast(images / 255.0, tf.float32), tf.cast(labels, tf.float32)
 
 
-def mixup_batch(images: Any, labels: Any, alpha: float = 0.2) -> tuple[Any, Any]:
-    batch_size = tf.shape(images)[0]
-    gamma1 = tf.random.gamma([], alpha, dtype=tf.float32)
-    gamma2 = tf.random.gamma([], alpha, dtype=tf.float32)
-    mixture = gamma1 / (gamma1 + gamma2)
-    indices = tf.random.shuffle(tf.range(batch_size))
-    mixed_images = mixture * images + (1.0 - mixture) * tf.gather(images, indices)
-    mixed_labels = mixture * labels + (1.0 - mixture) * tf.gather(labels, indices)
-    return mixed_images, mixed_labels
+def augment_batch(images: Any, labels: Any) -> tuple[Any, Any]:
+    # Fine-grained car ID overfit when mixup, rotation, or random cropping
+    # cut badges/grilles. Keep train geometry aligned with evaluation.
+    flip, contrast = get_augmenters()
+    images, labels = to_unit_interval(images, labels)
+    images = flip(images, training=True)
+    images = contrast(images, training=True)
+    images = tf.image.random_brightness(images, 0.08)
+    images = tf.clip_by_value(images, 0.0, 1.0)
+    return tf.cast(images, tf.float32), labels
 
 
 def make_datasets(class_names: list[str], batch_size: int, seed: int):
@@ -265,10 +251,10 @@ def make_datasets(class_names: list[str], batch_size: int, seed: int):
         "label_mode": "categorical",
         "class_names": class_names,
         "batch_size": batch_size,
+        "image_size": (IMAGE_SIZE, IMAGE_SIZE),
     }
     train_ds = keras.utils.image_dataset_from_directory(
         TRAIN_DIR,
-        image_size=(TRAIN_LOAD_SIZE, TRAIN_LOAD_SIZE),
         shuffle=True,
         seed=seed,
         validation_split=0.1,
@@ -277,7 +263,6 @@ def make_datasets(class_names: list[str], batch_size: int, seed: int):
     )
     val_ds = keras.utils.image_dataset_from_directory(
         TRAIN_DIR,
-        image_size=(IMAGE_SIZE, IMAGE_SIZE),
         shuffle=False,
         seed=seed,
         validation_split=0.1,
@@ -286,12 +271,8 @@ def make_datasets(class_names: list[str], batch_size: int, seed: int):
     )
     test_ds = make_test_dataset(class_names, batch_size)
     autotune = tf.data.AUTOTUNE
-    train_ds = (
-        train_ds.map(augment_batch, num_parallel_calls=autotune)
-        .map(mixup_batch, num_parallel_calls=autotune)
-        .prefetch(autotune)
-    )
-    val_ds = val_ds.map(center_resize, num_parallel_calls=autotune).prefetch(autotune)
+    train_ds = train_ds.map(augment_batch, num_parallel_calls=autotune).prefetch(autotune)
+    val_ds = val_ds.map(to_unit_interval, num_parallel_calls=autotune).prefetch(autotune)
     return train_ds, val_ds, test_ds
 
 
@@ -305,7 +286,7 @@ def make_test_dataset(class_names: list[str], batch_size: int):
         batch_size=batch_size,
         shuffle=False,
     )
-    return dataset.map(center_resize, num_parallel_calls=tf.data.AUTOTUNE).prefetch(
+    return dataset.map(to_unit_interval, num_parallel_calls=tf.data.AUTOTUNE).prefetch(
         tf.data.AUTOTUNE
     )
 

@@ -9,10 +9,11 @@ This directory contains trained models and related files.
 
 ## Model Information
 
-- **Architecture**: ResNet50 + Custom Classification Head
-- **Input Shape**: (224, 224, 3)
+- **Architecture**: EfficientNetV2-S + GAP + dropout + 196-way softmax
+- **Input Shape**: (224, 224, 3) RGB in `[0, 1]`
 - **Output Classes**: 196 (Stanford Cars Dataset)
-- **Training**: Transfer Learning + Fine-tuning
+- **Training**: Transfer learning, then partial backbone fine-tune
+- **Held-out test**: 81.88% top-1 / 95.54% top-5 (run `mild-aug-v1`)
 
 ## Usage
 

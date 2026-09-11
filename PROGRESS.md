@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-12 (service Cycle 43)
+Last updated: 2026-09-12 (service Cycle 44)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 43: 132 model-free tests cover the API boundary,
+- Baseline after Cycle 44: 132 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -43,6 +43,12 @@ Last updated: 2026-09-12 (service Cycle 43)
 - The optional EfficientNetV2 trainer is an explicit, isolated experiment
   path: it imports without TensorFlow, selects only on validation accuracy,
   reports test results without promotion, and cannot write the deployed model.
+- Deployed `best_car_model.keras` is now the Cycle 44 EfficientNetV2-S
+  candidate (`training_runs/mild-aug-v1`): Stanford Cars official test
+  **81.88% top-1 / 95.54% top-5**, versus the previous ResNet50 58.69% / 84.39%.
+  ImageNet `[-1, 1]` scaling is inside the graph so the API can keep feeding
+  RGB floats in `[0, 1]`. The previous ResNet artifact was copied aside as
+  `best_car_model.previous.keras` (gitignored).
 - Dependency audit: workspace and test `httpx2` is pinned at 2.12.0; the
   lightweight test graph has zero known vulnerabilities. Production
   `requirements-api.txt` does not include httpx2. Remaining advisories are the
@@ -54,6 +60,7 @@ Last updated: 2026-09-12 (service Cycle 43)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 16 unique advisory records duplicated across two manifests, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| — | Promote the mild-aug EfficientNetV2-S candidate after official-test proof | Accuracy / serving | High: deployed ResNet50 was 58.69% top-1 on Stanford Cars test; mixup/rotation/crop overfit to 43% | Medium / medium | Isolated `mild-aug-v1` run, API `[0, 1]` load, 81.88% / 95.54% re-eval | Completed in Cycle 44 |
 | — | Isolate and fail-safe the optional EfficientNet trainer | Training safety / reproducibility | High: the draft could select deployment from test accuracy and overwrite the deployed artifact automatically | Medium / low | Model-free CLI/path/source contracts plus preserved experiment evidence | Completed in Cycle 43 |
 | — | Pin httpx2 2.12.0 on workspace and test manifests | Security / maintenance | High: Dependabot flagged decompression-bomb, smuggling, multipart, SSE, and SOCKS-WSS advisories on 2.7.0 | Tiny / low | Aligned workspace/test pins plus requirements contract | Completed in Cycle 42 |
 | — | Echo the model-lane wait on overload 503 via `Retry-After` | API contract / DX | Low-medium: callers already waited five seconds, but only overload responses should advertise that retry delay | Tiny / low | Header present on model-lane 503, absent on 200/422 and non-overload 503s | Completed in Cycle 41 |
@@ -92,6 +99,32 @@ Last updated: 2026-09-12 (service Cycle 43)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 44 — Deploy EfficientNetV2-S after 81.88% official-test (2026-09-12)
+
+**Why this won:** The original ResNet50 notebook run was 58.69% top-1 / 84.39%
+top-5 on Stanford Cars test, and the API's `[0, 1]` preprocess did not match
+that model's `[0, 255]` training. A first EfficientNet attempt with mixup,
+rotation, and random crops reached 94% train-holdout validation but only 43%
+test. Cycle 43 then forbade the trainer from auto-promoting. A second isolated
+run with flip/color-only augmentation generalized.
+
+**Changes and verification**
+
+- Trainer augmentation is horizontal flip plus mild brightness/contrast; train
+  and eval both use 224×224. Mixup, rotation, and random crop were removed.
+- ImageNet scaling stays inside the graph (`Rescaling(2, offset=-1)` with
+  `include_preprocessing=False`) so `api.utils.preprocess_image` is unchanged.
+- Isolated run `mild-aug-v1`: 8 frozen-head epochs + 30 fine-tune epochs,
+  AdamW, label smoothing 0.1, batch 32, RTX 4060.
+- Official test after selection: **81.88% top-1, 95.54% top-5**. Reloaded
+  through the API loader: input `(None, 224, 224, 3)`, a Hummer test JPEG
+  predicted correctly at 0.73, and a second full test pass reported 81.89% /
+  95.55%.
+- Copied `training_runs/mild-aug-v1/best_val.keras` over
+  `best_car_model.keras` outside the trainer. Previous ResNet weights kept as
+  `best_car_model.previous.keras`. Both remain gitignored.
+- Model-free suite: 132 tests passed. Keras pin stays 3.10.0.
 
 ### Cycle 43 — Isolate candidate training from deployment (2026-09-12)
 

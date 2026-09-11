@@ -1,16 +1,16 @@
 # Car Type Classification Service
 
-A production-ready deep learning service that classifies car images into 196 car types using ResNet50 transfer learning.
+A production-ready deep learning service that classifies car images into 196 car types using EfficientNetV2-S transfer learning.
 
 ## 🎯 Overview
 
-This service classifies car images into 196 different car types using transfer learning with ResNet50 backbone:
+This service classifies car images into 196 different car types using transfer learning with an EfficientNetV2-S backbone:
 
-- **🧠 Model**: ResNet50 + transfer learning (TensorFlow 2.19.0)
+- **🧠 Model**: EfficientNetV2-S + transfer learning (TensorFlow 2.19.0 / Keras 3.10.0)
 - **📊 Dataset**: Stanford Cars (196 classes, 16K+ images)
 - **🚀 API**: FastAPI with `/predict` endpoint
 - **🐳 Deploy**: Docker containerization
-- **📝 Training**: Complete Jupyter notebook pipeline
+- **📝 Training**: Isolated `tools/train_optimized.py` candidate runs + original notebook
 
 ## 🏗️ Project Structure
 
@@ -205,22 +205,28 @@ itself remains limited to 10 MiB.
 ## 🧠 Model Details
 
 ### Architecture
-- **Base**: ResNet50 (pre-trained on ImageNet)
-- **Input**: 224×224 RGB images  
+- **Base**: EfficientNetV2-S (ImageNet), ImageNet scaling baked into the graph
+- **Input**: 224×224 RGB images in `[0, 1]` (same contract as `api.utils.preprocess_image`)
 - **Output**: 196 car classes (softmax)
-- **Size**: ~172MB
+- **Size**: ~332MB (`.keras`)
 
 ### Training Pipeline
-1. **Phase 1** (~25 epochs): Frozen backbone + train classifier
-2. **Phase 2** (~15 epochs): Fine-tune top layers with lower LR
+1. **Phase 1** (8 epochs): Frozen backbone, train the classifier head
+2. **Phase 2** (30 epochs): Fine-tune later backbone stages with AdamW
+3. Augmentation is horizontal flip plus mild color jitter only. Mixup, rotation,
+   and random crops were tried and hurt official-test generalization.
 
-### Deployed ResNet Performance Metrics
-| Metric | Score |
-|--------|-------|
-| Training Accuracy | 99%+ |
-| Validation Accuracy | 58.69% |
-| Top-5 Accuracy | 84.39% |
-| Model Size | 172.64MB |
+Candidate runs live under `training_runs/<name>/` and never overwrite the
+deployed artifact. Promote a checkpoint only after the Stanford Cars test split
+beats the previous deployed score.
+
+### Deployed EfficientNetV2-S Performance (Stanford Cars official test)
+| Metric | Previous ResNet50 | Current |
+|--------|-------------------|---------|
+| Test top-1 | 58.69% | **81.88%** |
+| Test top-5 | 84.39% | **95.54%** |
+| Train-holdout val top-1 | 56.88% | 98.28% |
+| Artifact | 251MB `.keras` | 332MB `.keras` |
 
 ## � Troubleshooting
 
@@ -267,7 +273,7 @@ export CUDA_VISIBLE_DEVICES=""
 - ✅ `model_training.ipynb` - Interactive training notebook
 - ✅ `prediction_example.py` - Validated standalone inference example
 - ✅ Stanford Cars dataset support (196 classes)
-- ✅ ResNet50 + transfer learning architecture
+- ✅ EfficientNetV2-S + transfer learning architecture
 - ✅ Complete training pipeline with metrics
 - ✅ Model export (`.keras` + `.h5` formats)
 - ✅ FastAPI service with `/predict` endpoint
