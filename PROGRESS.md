@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-12 (service Cycle 44)
+Last updated: 2026-09-13 (service Cycle 45)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 44: 132 model-free tests cover the API boundary,
+- Baseline after Cycle 45: 150 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -42,13 +42,18 @@ Last updated: 2026-09-12 (service Cycle 44)
   with a contract that derives the expected major version from `LICENSE`.
 - The optional EfficientNetV2 trainer is an explicit, isolated experiment
   path: it imports without TensorFlow, selects only on validation accuracy,
-  reports test results without promotion, and cannot write the deployed model.
-- Deployed `best_car_model.keras` is now the Cycle 44 EfficientNetV2-S
+  reports test results without promotion, and cannot write the selected runtime
+  model.
+- This workspace's selected `best_car_model.keras` is the Cycle 44 EfficientNetV2-S
   candidate (`training_runs/mild-aug-v1`): Stanford Cars official test
   **81.88% top-1 / 95.54% top-5**, versus the previous ResNet50 58.69% / 84.39%.
   ImageNet `[-1, 1]` scaling is inside the graph so the API can keep feeding
   RGB floats in `[0, 1]`. The previous ResNet artifact was copied aside as
   `best_car_model.previous.keras` (gitignored).
+- The selected artifact is gitignored rather than distributed by GitHub. A
+  tracked manifest now pins its 347,612,129-byte size/SHA-256 and the exact
+  class mapping; API startup, local launch, and Docker builds fail closed if
+  either input changes.
 - Dependency audit: workspace and test `httpx2` is pinned at 2.12.0; the
   lightweight test graph has zero known vulnerabilities. Production
   `requirements-api.txt` does not include httpx2. Remaining advisories are the
@@ -60,7 +65,8 @@ Last updated: 2026-09-12 (service Cycle 44)
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
 | 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 16 unique advisory records duplicated across two manifests, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
-| — | Promote the mild-aug EfficientNetV2-S candidate after official-test proof | Accuracy / serving | High: deployed ResNet50 was 58.69% top-1 on Stanford Cars test; mixup/rotation/crop overfit to 43% | Medium / medium | Isolated `mild-aug-v1` run, API `[0, 1]` load, 81.88% / 95.54% re-eval | Completed in Cycle 44 |
+| — | Authenticate the selected local model and state its distribution boundary | Integrity / reproducibility | High: gitignored weights could be silently replaced, while a code/docs push did not distribute them | Small / low | Tracked model/mapping hashes and provenance, authoritative selection, fail-closed launch/API/Docker checks, 150 tests | Completed in Cycle 45 |
+| — | Select the mild-aug EfficientNetV2-S runtime artifact after official-test proof | Accuracy / serving | High: previous ResNet50 was 58.69% top-1 on Stanford Cars test; mixup/rotation/crop overfit to 43% | Medium / medium | Isolated `mild-aug-v1` run, API `[0, 1]` load, 81.88% / 95.54% re-eval | Completed in Cycle 44 |
 | — | Isolate and fail-safe the optional EfficientNet trainer | Training safety / reproducibility | High: the draft could select deployment from test accuracy and overwrite the deployed artifact automatically | Medium / low | Model-free CLI/path/source contracts plus preserved experiment evidence | Completed in Cycle 43 |
 | — | Pin httpx2 2.12.0 on workspace and test manifests | Security / maintenance | High: Dependabot flagged decompression-bomb, smuggling, multipart, SSE, and SOCKS-WSS advisories on 2.7.0 | Tiny / low | Aligned workspace/test pins plus requirements contract | Completed in Cycle 42 |
 | — | Echo the model-lane wait on overload 503 via `Retry-After` | API contract / DX | Low-medium: callers already waited five seconds, but only overload responses should advertise that retry delay | Tiny / low | Header present on model-lane 503, absent on 200/422 and non-overload 503s | Completed in Cycle 41 |
@@ -100,7 +106,42 @@ Last updated: 2026-09-12 (service Cycle 44)
 
 ## Cycle log
 
-### Cycle 44 — Deploy EfficientNetV2-S after 81.88% official-test (2026-09-12)
+### Cycle 45 — Authenticate selected local weights (2026-09-13)
+
+**Why this won:** Cycle 44 changed the local gitignored model, but its commit
+could only publish trainer code and documentation. A fresh clone still had no
+weights, and the service had no way to distinguish the reviewed checkpoint
+from any other file named `best_car_model.keras`.
+
+**Changes and verification**
+
+- Added tracked `model_manifest.json` with the selected filename, model and
+  class-mapping byte sizes/SHA-256 values, architecture/input contract,
+  candidate provenance, final-test metrics, and an explicit statement that
+  weights are not distributed in Git.
+- API loading, `run.py` local launch, and Docker builds authenticate the
+  selected artifact and mapping before Keras uses them. A present manifest is
+  authoritative: missing, altered, or unloadable selected weights fail closed
+  and cannot silently fall back to a different model. Unmanifested local
+  operator artifacts retain the legacy discovery order.
+- Docker now includes the manifest and repeats verification at container
+  startup. The current Debian Trixie-based `python:3.12-slim` image also uses
+  available `libgl1` instead of the removed `libgl1-mesa-glx` package.
+  Its allowlist sends only API Python sources and the selected `.keras` model,
+  excluding local bytecode and the unused H5 weights. Documentation
+  distinguishes environment setup, local artifact selection, Git publication,
+  and host/container deployment.
+- Independently loaded SHA-256
+  `a97b7d139d86c9f9fea7b9886e9bc73921e7528295a1644a3d342973f343029c`
+  through `api.utils`: 20,582,436 parameters, input `(None, 224, 224, 3)`,
+  output `(None, 196)`, in-graph `Rescaling(2, offset=-1)`, and a correct
+  Hummer prediction. A new full 8,041-image evaluation reproduced **81.89%
+  top-1 / 95.55% top-5**.
+- Model-free suite: 150 tests passed with warnings treated as errors; real
+  manifest verification, API-loader smoke, Docker build, and container
+  readiness also passed.
+
+### Cycle 44 — Select EfficientNetV2-S after 81.88% official-test (2026-09-12)
 
 **Why this won:** The original ResNet50 notebook run was 58.69% top-1 / 84.39%
 top-5 on Stanford Cars test, and the API's `[0, 1]` preprocess did not match
@@ -121,9 +162,10 @@ run with flip/color-only augmentation generalized.
   through the API loader: input `(None, 224, 224, 3)`, a Hummer test JPEG
   predicted correctly at 0.73, and a second full test pass reported 81.89% /
   95.55%.
-- Copied `training_runs/mild-aug-v1/best_val.keras` over
+- Copied `training_runs/mild-aug-v1/best_val.keras` over the local
   `best_car_model.keras` outside the trainer. Previous ResNet weights kept as
-  `best_car_model.previous.keras`. Both remain gitignored.
+  `best_car_model.previous.keras`. Both remain gitignored and are not
+  distributed by the Git commit.
 - Model-free suite: 132 tests passed. Keras pin stays 3.10.0.
 
 ### Cycle 43 — Isolate candidate training from deployment (2026-09-12)

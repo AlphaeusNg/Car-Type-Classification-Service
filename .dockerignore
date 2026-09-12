@@ -5,7 +5,7 @@
 !Dockerfile
 !requirements-api.txt
 !api/
-!api/**
+!api/*.py
 !class_mapping.json
+!model_manifest.json
 !best_car_model.keras
-!car_classification_model.h5

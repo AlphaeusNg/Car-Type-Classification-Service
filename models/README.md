@@ -14,14 +14,20 @@ This directory contains trained models and related files.
 - **Output Classes**: 196 (Stanford Cars Dataset)
 - **Training**: Transfer learning, then partial backbone fine-tune
 - **Held-out test**: 81.88% top-1 / 95.54% top-5 (run `mild-aug-v1`)
+- **Integrity**: root `model_manifest.json` authenticates the selected local
+  artifact and exact class mapping; model weights remain gitignored and are not
+  distributed by Git
 
 ## Usage
 
-The API service automatically loads supported artifacts from the repository
-root in this order:
+Without a manifest, the API service discovers supported artifacts from the
+repository root in this legacy order:
 
 1. Keras v3 (`best_car_model.keras`)
 2. HDF5 (`car_classification_model.h5`)
+
+When `model_manifest.json` is present, its declared artifact is authoritative
+and the loader does not fall back to another file.
 
 ## Note
 

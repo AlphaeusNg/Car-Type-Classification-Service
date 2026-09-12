@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "artifact": {
+    "path": "best_car_model.keras",
+    "sha256": "a97b7d139d86c9f9fea7b9886e9bc73921e7528295a1644a3d342973f343029c",
+    "size_bytes": 347612129
+  },
+  "class_mapping": {
+    "path": "class_mapping.json",
+    "sha256": "5fc7e7690897eed7a20fcd0971db84181bdf21a661179f353df6b1b7a1d74511",
+    "size_bytes": 15838
+  },
+  "model": {
+    "architecture": "EfficientNetV2-S",
+    "input_shape": [
+      null,
+      224,
+      224,
+      3
+    ],
+    "output_classes": 196,
+    "input_contract": "RGB float32 in [0, 1]; graph rescales to [-1, 1]"
+  },
+  "provenance": {
+    "selected_at": "2026-09-12",
+    "candidate_run": "mild-aug-v1",
+    "selection_metric": "val_accuracy",
+    "test_role": "final_report_only",
+    "stanford_cars_official_test": {
+      "images": 8041,
+      "top_1_accuracy": 0.818803608417511,
+      "top_5_accuracy": 0.9553537964820862
+    }
+  },
+  "distribution": {
+    "weights_tracked_in_git": false,
+    "note": "This manifest authenticates the selected local artifact; it does not distribute the model weights."
+  }
+}

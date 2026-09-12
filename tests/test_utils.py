@@ -1,3 +1,4 @@
+import hashlib
 import json
 from io import BytesIO
 from pathlib import Path
@@ -238,6 +239,76 @@ def test_load_model_falls_back_after_preferred_artifact_fails(tmp_path):
         (str(preferred), {"compile": False}),
         (str(legacy), {"compile": False}),
     ]
+
+
+def test_load_model_does_not_fallback_after_preferred_integrity_failure(tmp_path):
+    preferred = tmp_path / "best_car_model.keras"
+    legacy = tmp_path / "car_classification_model.h5"
+    preferred.write_bytes(b"untrusted")
+    legacy.write_bytes(b"legacy")
+    mapping_path = tmp_path / "class_mapping.json"
+    mapping_path.write_bytes(b"mapping")
+    (tmp_path / "model_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "artifact": {
+                    "path": preferred.name,
+                    "sha256": "0" * 64,
+                    "size_bytes": preferred.stat().st_size,
+                },
+                "class_mapping": {
+                    "path": mapping_path.name,
+                    "sha256": hashlib.sha256(mapping_path.read_bytes()).hexdigest(),
+                    "size_bytes": mapping_path.stat().st_size,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = []
+
+    with pytest.raises(RuntimeError, match="failed integrity verification"):
+        load_model(tmp_path, lambda path, **_options: calls.append(path))
+
+    assert calls == []
+
+
+def test_load_model_does_not_fallback_when_manifest_selection_cannot_load(tmp_path):
+    preferred = tmp_path / "best_car_model.keras"
+    legacy = tmp_path / "car_classification_model.h5"
+    mapping_path = tmp_path / "class_mapping.json"
+    preferred.write_bytes(b"selected")
+    legacy.write_bytes(b"legacy")
+    mapping_path.write_bytes(b"mapping")
+    (tmp_path / "model_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "artifact": {
+                    "path": preferred.name,
+                    "sha256": hashlib.sha256(preferred.read_bytes()).hexdigest(),
+                    "size_bytes": preferred.stat().st_size,
+                },
+                "class_mapping": {
+                    "path": mapping_path.name,
+                    "sha256": hashlib.sha256(mapping_path.read_bytes()).hexdigest(),
+                    "size_bytes": mapping_path.stat().st_size,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def loader(path, **_options):
+        calls.append(path)
+        raise ValueError("selected artifact cannot load")
+
+    with pytest.raises(RuntimeError, match="none could be loaded"):
+        load_model(tmp_path, loader)
+
+    assert calls == [str(preferred)]
 
 
 def test_load_model_rejects_keras3_incompatible_savedmodel_directory(tmp_path):

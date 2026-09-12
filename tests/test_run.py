@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 import subprocess
 
@@ -6,6 +8,39 @@ import pytest
 
 import run
 from api.model_artifacts import MODEL_CANDIDATES
+
+
+def write_manifested_runtime(
+    root,
+    *,
+    artifact_name="best_car_model.keras",
+    model_payload=b"model",
+    model_digest=None,
+):
+    root = Path(root)
+    model = root / artifact_name
+    mapping = root / "class_mapping.json"
+    model.write_bytes(model_payload)
+    mapping.write_bytes(b"mapping")
+    (root / "model_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "artifact": {
+                    "path": artifact_name,
+                    "sha256": model_digest or hashlib.sha256(model_payload).hexdigest(),
+                    "size_bytes": len(model_payload),
+                },
+                "class_mapping": {
+                    "path": mapping.name,
+                    "sha256": hashlib.sha256(mapping.read_bytes()).hexdigest(),
+                    "size_bytes": mapping.stat().st_size,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return model
 
 
 def test_runner_uses_the_shared_supported_artifact_order():
@@ -46,8 +81,7 @@ def test_model_discovery_returns_none_when_artifact_is_missing(tmp_path):
 
 def test_docker_build_uses_discovered_model_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    Path("best_car_model.keras").touch()
-    Path("class_mapping.json").touch()
+    write_manifested_runtime(tmp_path)
     commands = []
 
     def capture(command, _description):
@@ -61,8 +95,6 @@ def test_docker_build_uses_discovered_model_path(tmp_path, monkeypatch):
         [
             "docker",
             "build",
-            "--build-arg",
-            "MODEL_PATH=best_car_model.keras",
             "-t",
             "car-classification-service:latest",
             ".",
@@ -72,11 +104,64 @@ def test_docker_build_uses_discovered_model_path(tmp_path, monkeypatch):
 
 def test_docker_build_fails_before_docker_when_model_is_missing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    Path("class_mapping.json").touch()
+    model = write_manifested_runtime(tmp_path)
+    model.unlink()
     monkeypatch.setattr(
         run,
         "run_command",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not call Docker")),
+    )
+
+    assert not run.build_docker()
+
+
+def test_docker_build_requires_manifest_before_calling_docker(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("best_car_model.keras").write_bytes(b"model")
+    Path("class_mapping.json").write_bytes(b"mapping")
+    monkeypatch.setattr(
+        run,
+        "run_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not call Docker")
+        ),
+    )
+
+    assert not run.build_docker()
+
+
+def test_docker_build_fails_before_docker_when_model_integrity_fails(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    write_manifested_runtime(
+        tmp_path,
+        model_payload=b"changed model",
+        model_digest=hashlib.sha256(b"original model").hexdigest(),
+    )
+    monkeypatch.setattr(
+        run,
+        "run_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not call Docker")
+        ),
+    )
+
+    assert not run.build_docker()
+
+
+def test_docker_build_rejects_manifest_selected_h5(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_manifested_runtime(
+        tmp_path,
+        artifact_name="car_classification_model.h5",
+    )
+    monkeypatch.setattr(
+        run,
+        "run_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not call Docker")
+        ),
     )
 
     assert not run.build_docker()

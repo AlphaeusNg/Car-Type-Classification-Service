@@ -39,6 +39,10 @@ data/train  data/test  # Stanford Cars images (large)
   `load_model()` does not support TensorFlow SavedModel directories; re-export
   those artifacts before service or Docker use.
 - Models and `data/` are heavy — don’t casually reformat or re-upload huge assets.
+- Model weights are gitignored and are not distributed by a code/docs push.
+  Root `model_manifest.json` authenticates this workspace's selected local
+  artifact; update its size/SHA/provenance only after a trusted, independently
+  verified selection.
 - Prefer API changes in `api/` with small utilities; keep training experiments in notebooks unless promoting a new saved model.
 
 ## Commands

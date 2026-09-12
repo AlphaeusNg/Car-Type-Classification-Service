@@ -22,6 +22,7 @@ This service classifies car images into 196 different car types using transfer l
 │   └── utils.py                  #   └── Model utilities
 ├── run.py                        # ⚡ One-command setup & deploy
 ├── tools/train_optimized.py      # 🧪 Isolated EfficientNet candidate training
+├── model_manifest.json           # 🔐 Selected local artifact identity/provenance
 ├── requirements.txt              # 📦 Python dependencies
 ├── README.md                     # 📄Documentation
 ├── Dockerfile                    # 🐳 Container configuration
@@ -39,14 +40,21 @@ This service classifies car images into 196 different car types using transfer l
 - 4GB RAM (8GB+ recommended for training)
 - Docker (optional)
 
-### 1. One-Command Setup
+### 1. Install the environment
 ```bash
 git clone https://github.com/AlphaeusNg/Car-Type-Classification-Service.git
 cd Car-Type-Classification-Service
-python3 run.py --setup  # Auto-installs everything
+python3 run.py --setup  # Installs the pinned Python environment
 ```
 
-### 2. Train Model
+Model weights and datasets are intentionally excluded from Git. Setup installs
+the software environment, but a fresh clone cannot serve predictions until you
+provide a compatible model artifact. The tracked `model_manifest.json`
+authenticates this workspace's selected `best_car_model.keras`; it records
+the weight and class-mapping identities plus provenance, but does not distribute
+the 332 MB weights.
+
+### 2. Train or provide a model
 ```bash
 # Jupyter Notebook (Interactive)
 jupyter notebook model_training.ipynb
@@ -61,7 +69,11 @@ The command-line trainer writes only to the ignored
 name. It never replaces `best_car_model.keras`. Checkpoint selection uses
 validation accuracy; the test split is evaluated afterward for reporting only.
 Review the run's `metrics.json`, compatibility, and representative prediction
-equivalence separately before any manual deployment decision.
+equivalence separately before any manual runtime-selection decision. Copying a
+reviewed checkpoint to `best_car_model.keras` and updating
+`model_manifest.json` are explicit operator actions outside the trainer. Do not
+describe a Git push as a model deployment: the weights remain gitignored and
+must be placed on each host or included in a locally built container.
 
 Training requires a detected GPU by default and uses mixed precision there.
 For an intentionally slower CPU run, opt in explicitly with `--allow-cpu`; the
@@ -76,13 +88,14 @@ Add `--allow-cpu` to that command when evaluating without a GPU. The legacy
 tracked `training_history.json` records experiment history and is not proof
 that the corresponding candidate was deployed.
 
-### 3. Start API
+### 3. Start the API after the artifact is present
 ```bash
 python3 run.py --mode local    # Local development
 python3 run.py --mode docker   # Docker deployment
 ```
 
-That's it! API runs at **http://localhost:8000** 🎉
+The API runs at **http://localhost:8000** after the selected artifact passes
+its manifest integrity check.
 
 ### Run tests
 
@@ -117,17 +130,28 @@ network architecture and weights, so optimizer/training state is neither
 restored nor allowed to create irrelevant optimizer-variable warnings. This
 does not change notebook training or model export.
 
-`run.py` and the Docker build accept the same model formats as the Keras 3 API
-loader: `best_car_model.keras` or `car_classification_model.h5`. Keras 3 does
-not load a TensorFlow SavedModel directory through `load_model()`; the
+The local Keras 3 API loader supports `best_car_model.keras` and the legacy
+`car_classification_model.h5`. When a manifest is present, its declared file is
+authoritative: a missing, altered, or unloadable selection fails closed instead
+of falling back to a different model. Keras 3 does not load a TensorFlow
+SavedModel directory through `load_model()`; the
 [official Keras 3 migration guide](https://keras.io/guides/migrating_to_keras_3/#loading-a-tf-savedmodel)
 requires a different inference-layer contract for that format. Re-export a
-legacy SavedModel to `.keras` before using it with this service. For a manual
-Docker build, select the artifact explicitly when it is not the default:
+legacy SavedModel to `.keras` before using it with this service.
+
+The Docker image deliberately packages only the current manifest-selected
+`best_car_model.keras`; unused legacy weights and local bytecode stay outside
+the build context. Build it after placing the authenticated artifact:
 
 ```bash
-docker build --build-arg MODEL_PATH=car_classification_model.h5 -t car-type-clf .
+docker build -t car-type-clf .
 ```
+
+The selected default artifact is checked against `model_manifest.json` before
+local launch, before a Docker build, and again during container startup. A size
+or SHA-256 mismatch in either the weights or `class_mapping.json` fails closed
+before Keras deserialization. To select an H5 artifact for local use, update the
+manifest's artifact record deliberately; Docker remains `.keras`-only.
 
 For one local image without starting the API, update the sample path at the
 bottom of `prediction_example.py` and run `python3 prediction_example.py`.
@@ -217,10 +241,11 @@ itself remains limited to 10 MiB.
    and random crops were tried and hurt official-test generalization.
 
 Candidate runs live under `training_runs/<name>/` and never overwrite the
-deployed artifact. Promote a checkpoint only after the Stanford Cars test split
-beats the previous deployed score.
+selected runtime artifact. Choose by validation performance, evaluate the
+official test split once for final reporting, then record any deliberate local
+selection in `model_manifest.json`.
 
-### Deployed EfficientNetV2-S Performance (Stanford Cars official test)
+### Locally selected EfficientNetV2-S (Stanford Cars official test)
 | Metric | Previous ResNet50 | Current |
 |--------|-------------------|---------|
 | Test top-1 | 58.69% | **81.88%** |
@@ -228,13 +253,17 @@ beats the previous deployed score.
 | Train-holdout val top-1 | 56.88% | 98.28% |
 | Artifact | 251MB `.keras` | 332MB `.keras` |
 
-## � Troubleshooting
+These metrics describe the artifact authenticated by the tracked manifest in
+this workspace. The artifact is not included in Git or published by this
+repository's CI workflow.
+
+## 🛠️ Troubleshooting
 
 ### Common Issues
 
 **🚨 "Model not found"**
 ```bash
-# Train model first
+# Train a model or place a compatible artifact at the repository root
 jupyter notebook model_training.ipynb
 ```
 
@@ -312,7 +341,7 @@ GNU General Public License v3.0 — see the [LICENSE](LICENSE) file.
 - Stanford Cars Dataset creators
 - TensorFlow/Keras teams  
 - FastAPI framework
-- ResNet architecture authors
+- EfficientNetV2 and ResNet architecture authors
 
 ## 📞 Contact
 

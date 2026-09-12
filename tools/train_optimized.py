@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Train or evaluate an isolated EfficientNetV2 Stanford Cars candidate.
 
-This tool never writes the deployed ``best_car_model.keras`` artifact. Training
-selects checkpoints only by validation accuracy, then evaluates the selected
-candidate on the test split once for reporting. Every output stays below the
-ignored ``training_runs/<run-name>/`` directory.
+This tool never writes the selected ``best_car_model.keras`` runtime artifact.
+Training selects checkpoints only by validation accuracy, then evaluates the
+selected candidate on the test split once for reporting. Every output stays
+below the ignored ``training_runs/<run-name>/`` directory.
 
 TensorFlow is loaded only after an explicit ``--train`` or ``--evaluate-run``
 operation has been parsed, so ``--help`` and the model-free tests remain light.
@@ -361,7 +361,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     operation.add_argument(
         "--train",
         action="store_true",
-        help="train a new isolated candidate; never changes the deployed model",
+        help=(
+            "train a new isolated candidate; never changes the selected "
+            "runtime model"
+        ),
     )
     operation.add_argument(
         "--evaluate-run",
@@ -452,7 +455,7 @@ def run_training(args: argparse.Namespace, paths: RunPaths) -> dict[str, Any]:
     )
 
     # Validation selected the checkpoint. Test is consulted only after selection
-    # and can never trigger a write to the deployed artifact.
+    # and can never trigger a write to the selected runtime artifact.
     selected = keras.models.load_model(paths.checkpoint, compile=False)
     compile_model(selected, learning_rate=1e-5)
     val_results = evaluate(selected, val_ds, "val")

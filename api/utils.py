@@ -12,7 +12,11 @@ import io
 from typing import TYPE_CHECKING, Dict, Any
 from pathlib import Path
 
-from api.model_artifacts import MODEL_CANDIDATES
+from api.model_artifacts import (
+    ModelArtifactIntegrityError,
+    model_candidates,
+    verify_model_artifact,
+)
 
 if TYPE_CHECKING:
     import tensorflow as tf
@@ -144,16 +148,27 @@ def load_model(project_root: Path | None = None, model_loader=None) -> tf.keras.
         project_root = Path(project_root)
     
     # Try different model formats in order of preference
-    model_paths = [project_root / relative for relative in MODEL_CANDIDATES]
+    try:
+        model_paths = [
+            project_root / relative
+            for relative in model_candidates(project_root)
+        ]
+    except ModelArtifactIntegrityError as exc:
+        raise RuntimeError(f"❌ Model manifest is invalid: {exc}") from exc
     
     load_failures = []
     for model_path in model_paths:
         if model_path.exists():
             try:
+                verify_model_artifact(model_path, project_root)
                 print(f"🔄 Loading model from: {model_path}")
                 model = model_loader(str(model_path), compile=False)
                 print(f"✅ Model loaded! Input shape: {model.input_shape}")
                 return model
+            except ModelArtifactIntegrityError as exc:
+                raise RuntimeError(
+                    f"❌ Selected model artifact failed integrity verification: {exc}"
+                ) from exc
             except Exception as e:
                 print(f"⚠️ Failed to load {model_path}: {e}")
                 load_failures.append(f"{model_path}: {type(e).__name__}: {e}")

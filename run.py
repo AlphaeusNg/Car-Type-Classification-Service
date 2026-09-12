@@ -12,7 +12,13 @@ import shlex
 import shutil
 from pathlib import Path
 
-from api.model_artifacts import MODEL_CANDIDATES, find_model_artifact
+from api.model_artifacts import (
+    MODEL_CANDIDATES,
+    MODEL_MANIFEST,
+    ModelArtifactIntegrityError,
+    find_model_artifact,
+    verify_model_artifact,
+)
 
 # Configuration
 PROJECT_NAME = "car-classification-service"
@@ -20,6 +26,7 @@ DOCKER_IMAGE = f"{PROJECT_NAME}:latest"
 DEFAULT_PORT = 8000
 API_MODULE = "api.main:app"
 CLASS_MAPPING_PATH = Path("class_mapping.json")
+DOCKER_MODEL_PATH = Path("best_car_model.keras")
 
 
 def valid_port(value):
@@ -46,6 +53,17 @@ def print_banner():
     """Print application banner"""
     print(f"\n{Colors.BLUE}{Colors.BOLD}🚗 Car Type Classification Service{Colors.END}")
     print(f"{Colors.BLUE}={'=' * 50}{Colors.END}\n")
+
+
+def selected_model_is_trusted(model_path):
+    """Authenticate the tracked preferred artifact before launch or packaging."""
+    try:
+        verify_model_artifact(model_path)
+    except ModelArtifactIntegrityError as exc:
+        print(f"{Colors.RED}❌ Model integrity check failed: {exc}{Colors.END}\n")
+        return False
+    return True
+
 
 def run_command(command, description, check=True):
     """Run an argument-vector command with captured output and no shell."""
@@ -136,25 +154,36 @@ def build_docker():
     """Build Docker image"""
     print(f"{Colors.BOLD}🐳 Building Docker image...{Colors.END}")
 
-    model_path = find_model_artifact()
+    try:
+        model_path = find_model_artifact()
+    except ModelArtifactIntegrityError as exc:
+        print(f"{Colors.RED}❌ Model manifest is invalid: {exc}{Colors.END}\n")
+        return False
     missing_files = []
     if model_path is None:
         missing_files.append("a supported .keras or .h5 model artifact")
     if not CLASS_MAPPING_PATH.exists():
         missing_files.append(str(CLASS_MAPPING_PATH))
+    if not MODEL_MANIFEST.exists():
+        missing_files.append(str(MODEL_MANIFEST))
 
     if missing_files:
         print(f"{Colors.RED}❌ Missing runtime artifacts: {', '.join(missing_files)}{Colors.END}")
         print(f"{Colors.YELLOW}   Please run the training notebook first{Colors.END}\n")
         return False
+    if not selected_model_is_trusted(model_path):
+        return False
+    if model_path != DOCKER_MODEL_PATH:
+        print(
+            f"{Colors.RED}❌ Docker packages only the manifest-selected "
+            f"{DOCKER_MODEL_PATH}{Colors.END}\n"
+        )
+        return False
 
     # Build Docker image
-    model_arg = model_path.as_posix()
     build_cmd = [
         'docker',
         'build',
-        '--build-arg',
-        f'MODEL_PATH={model_arg}',
         '-t',
         DOCKER_IMAGE,
         '.',
@@ -170,7 +199,11 @@ def run_local_api(port=DEFAULT_PORT, reload=True):
     """Run API locally with uvicorn"""
     print(f"{Colors.BOLD}🚀 Starting local API server...{Colors.END}")
     
-    model_path = find_model_artifact()
+    try:
+        model_path = find_model_artifact()
+    except ModelArtifactIntegrityError as exc:
+        print(f"{Colors.RED}❌ Model manifest is invalid: {exc}{Colors.END}\n")
+        return False
     missing_files = []
     if model_path is None:
         missing_files.append("a supported .keras or .h5 model artifact")
@@ -180,6 +213,8 @@ def run_local_api(port=DEFAULT_PORT, reload=True):
     if missing_files:
         print(f"{Colors.RED}❌ Missing required model files: {', '.join(missing_files)}{Colors.END}")
         print(f"{Colors.YELLOW}💡 Please run the training notebook first to generate model files{Colors.END}")
+        return False
+    if not selected_model_is_trusted(model_path):
         return False
     
     # Activate virtual environment and run uvicorn

@@ -6,7 +6,7 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
@@ -26,11 +26,11 @@ RUN pip install --upgrade pip && \
 RUN groupadd --system app && \
     useradd --system --gid app --create-home --home-dir /home/app app
 
-# Copy application code and the selected supported model artifact
-ARG MODEL_PATH=best_car_model.keras
+# Copy application code and the manifest-selected runtime artifact
 COPY --chown=app:app api/ api/
-COPY --chown=app:app ${MODEL_PATH} ${MODEL_PATH}
+COPY --chown=app:app best_car_model.keras best_car_model.keras
 COPY --chown=app:app class_mapping.json .
+COPY --chown=app:app model_manifest.json .
 
 # Expose port 8000
 EXPOSE 8000
