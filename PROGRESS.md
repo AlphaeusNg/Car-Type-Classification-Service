@@ -15,6 +15,9 @@ Last updated: 2026-09-26 (real non-promoted re-export verification)
   and `models/reexport-2026-09-26.md`. Serving weights, manifest, and class mapping
   hashes are unchanged. No promotion, newer-Keras claim, or accuracy reevaluation.
 - Regression gate: `.venv/bin/python -m pytest -q -W error`: 161 passed.
+- Hosted CI exposed an old local environment: the new async tests imported
+  `httpx`, while declared dependencies use `httpx2`. Corrected the import and
+  reran all 161 tests in a fresh environment from `requirements-test.txt`.
 
 ## Current state
 

@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from threading import Event, Lock
 
-import httpx
+import httpx2 as httpx
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
