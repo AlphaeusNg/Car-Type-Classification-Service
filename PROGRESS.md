@@ -3,13 +3,13 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-13 (service Cycle 45)
+Last updated: 2026-09-25 (service Cycle 46)
 
 ## Current state
 
 - FastAPI inference service for a 196-class TensorFlow/Keras model.
 - Model and dataset artifacts are intentionally not tracked in Git.
-- Baseline after Cycle 45: 150 model-free tests cover the API boundary,
+- Baseline after Cycle 46: 161 model-free tests cover the API boundary,
   lifecycle, model input/output compatibility, prediction decoding,
   probability-score semantics, exact class-mapping metadata, decoded-image
   policy, lightweight import, and model artifact discovery/build command.
@@ -59,12 +59,26 @@ Last updated: 2026-09-13 (service Cycle 45)
   `requirements-api.txt` does not include httpx2. Remaining advisories are the
   Keras 3.10.0 set (16 unique GHSAs duplicated across workspace and API
   manifests), constrained by real model compatibility.
+- `MODEL_CARD.md` records the manifest-selected EfficientNetV2-S artifact.
+  Every quoted metric names its split and procedure; missing figures stay
+  unavailable. `GET /metrics` exposes preprocessing, inference-queue wait, and
+  inference aggregates plus rejection and predict-path 503 counts, with no
+  image bytes or paths. README examples cover success, unsupported media,
+  oversized bodies, and `Retry-After` retries without calling softmax scores
+  calibrated. Cancelled queue waiters do not keep a lane permit; shutdown
+  waits for a lane holder and does not release it early.
+- `tools/check_reexport_equivalence.py` compares a candidate re-export to the
+  trusted Keras 3.10.0 artifact on a fixed eight-image sample. It does not
+  replace `best_car_model.keras` or `model_manifest.json`. Promoting a newer
+  Keras build is still blocked until that check is run against a real
+  re-export.
 
 ## Opportunity backlog
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 16 unique advisory records duplicated across two manifests, but every tested fixed release breaks real artifact loading | High / high | Requires trusted migration/re-export plus prediction-equivalence evidence | Backlog |
+| 1 | Re-export models for a current Keras release | Security / reliability | High: Keras 3.10 retains 16 unique advisory records duplicated across two manifests, but every tested fixed release breaks real artifact loading | High / high | Equivalence tool exists; promotion still needs a real re-export that passes it | Backlog |
+| — | Publish a model card, operator aggregates, API examples, and lane-cancellation behavior | Documentation / operability | Medium: serving evidence, overload retries, and shutdown capacity were scattered or unmeasured | Small / low | Model card, `/metrics`, README contract examples, cancellation and shutdown tests; 161 model-free tests | Completed in Cycle 46 |
 | — | Authenticate the selected local model and state its distribution boundary | Integrity / reproducibility | High: gitignored weights could be silently replaced, while a code/docs push did not distribute them | Small / low | Tracked model/mapping hashes and provenance, authoritative selection, fail-closed launch/API/Docker checks, 150 tests | Completed in Cycle 45 |
 | — | Select the mild-aug EfficientNetV2-S runtime artifact after official-test proof | Accuracy / serving | High: previous ResNet50 was 58.69% top-1 on Stanford Cars test; mixup/rotation/crop overfit to 43% | Medium / medium | Isolated `mild-aug-v1` run, API `[0, 1]` load, 81.88% / 95.54% re-eval | Completed in Cycle 44 |
 | — | Isolate and fail-safe the optional EfficientNet trainer | Training safety / reproducibility | High: the draft could select deployment from test accuracy and overwrite the deployed artifact automatically | Medium / low | Model-free CLI/path/source contracts plus preserved experiment evidence | Completed in Cycle 43 |
@@ -105,6 +119,34 @@ Last updated: 2026-09-13 (service Cycle 45)
 | — | Make API readiness and prediction failures honest and bounded | Correctness / test / security | High: false health, unbounded reads, and exception leakage | Small / low | Reproduced without a model artifact | Completed in Cycle 6 |
 
 ## Cycle log
+
+### Cycle 46 — Model card, equivalence check, and operator signals (2026-09-25)
+
+**Why this won:** The selected EfficientNetV2-S artifact, its Keras 3.10.0
+pin, and the retry/shutdown behavior were documented in fragments. Operators
+could not read aggregate latency or rejection counts, and a cancelled waiter
+could not be shown to return its lane.
+
+**Changes and verification**
+
+- Added `MODEL_CARD.md` from the manifest, `mild-aug-v1` metrics, the run log,
+  README, and PROGRESS. Metrics name the split and procedure. Figures that
+  were not recorded are marked unavailable.
+- Added read-only `tools/check_reexport_equivalence.py`. It requires Keras
+  3.10.0, compares load shape/parameter count and eight fixed test images
+  within declared score tolerances, and does not write the serving artifact or
+  manifest. Missing TensorFlow/Keras fails closed.
+- `GET /metrics` aggregates preprocessing, inference-queue wait, and inference
+  durations, plus rejection and predict-path 503 counts. Logs and the snapshot
+  omit image bytes, filenames, and payloads.
+- README examples match the 200, 400, 413, and retryable 503 contract and
+  state that `confidence` is not a calibrated probability.
+- In-flight lane work is shielded from client cancellation. Shutdown waits for
+  that work. A cancelled queued client does not keep the permit, and a later
+  valid request succeeds.
+- Model-free suite: `.venv/bin/python -m pytest -q -W error` — 161 passed.
+  No new model-backed evaluation was run, and the serving weights were not
+  replaced.
 
 ### Cycle 45 — Authenticate selected local weights (2026-09-13)
 

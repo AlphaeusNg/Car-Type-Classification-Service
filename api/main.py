@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 import sys
+import time
 from typing import Any, Dict
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -18,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
+    from api.request_metrics import RequestMetrics
     from api.utils import (
         decode_predictions,
         load_class_mapping,
@@ -27,6 +29,7 @@ try:
     )
 except ImportError:
     # Fallback for when running from api directory
+    from request_metrics import RequestMetrics
     from utils import (
         decode_predictions,
         load_class_mapping,
@@ -52,8 +55,20 @@ IMAGE_PROCESSING_RETRY_AFTER_SECONDS = 1
 MAX_CONCURRENT_PREDICTIONS = 1
 PREDICTION_QUEUE_TIMEOUT_SECONDS = 5.0
 PREDICTION_RETRY_AFTER_SECONDS = 5
+DETAIL_UNSUPPORTED_MEDIA = "File must be a JPEG or PNG image"
+DETAIL_EMPTY_IMAGE = "Image file is empty"
+DETAIL_OVERSIZED_UPLOAD = "Image exceeds the 10 MB upload limit"
+DETAIL_OVERSIZED_REQUEST = "Request exceeds the upload size limit"
+DETAIL_INVALID_IMAGE = "Invalid image data"
+DETAIL_MODEL_NOT_READY = "Model is not ready"
+DETAIL_IMAGE_BUSY = "Image processing queue is busy; retry later"
+DETAIL_PREDICTION_BUSY = "Prediction queue is busy; retry later"
 image_processing_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGE_PROCESSING)
 prediction_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PREDICTIONS)
+request_metrics = RequestMetrics()
+# In-flight lane workers. Shutdown waits for these and does not cancel them.
+lane_tasks: set[asyncio.Task] = set()
+shutting_down = asyncio.Event()
 
 
 class RequestBodyTooLarge(Exception):
@@ -104,9 +119,10 @@ class PredictRequestBodyLimitMiddleware:
 
     @staticmethod
     async def _reject(scope, receive, send):
+        request_metrics.record_rejection("oversized_request")
         response = JSONResponse(
             status_code=413,
-            content={"detail": "Request exceeds the upload size limit"},
+            content={"detail": DETAIL_OVERSIZED_REQUEST},
         )
         await response(scope, receive, send)
 
@@ -117,12 +133,56 @@ def run_model_inference(loaded_model, processed_image, index_to_class):
     return decode_predictions(predictions, index_to_class)
 
 
+def _retrieve_task_outcome(task: asyncio.Task) -> None:
+    """Mark a detached lane task retrieved so a cancelled client logs nothing."""
+    lane_tasks.discard(task)
+    if task.cancelled():
+        return
+    task.exception()
+
+
+async def run_holding_lane(semaphore, timeout, operation, on_wait=None):
+    """Run `operation` only after `semaphore` is acquired.
+
+    A caller cancelled while still waiting does not keep a permit. A caller
+    cancelled after acquire does not release the permit: the shielded worker
+    finishes and releases it. That keeps exclusive access to the shared model
+    when a client disconnects or the server shuts down.
+    """
+    started = time.perf_counter()
+    try:
+        await asyncio.wait_for(semaphore.acquire(), timeout=timeout)
+    except (asyncio.CancelledError, TimeoutError):
+        if on_wait is not None:
+            on_wait(time.perf_counter() - started)
+        raise
+
+    async def guarded():
+        try:
+            return await operation()
+        finally:
+            semaphore.release()
+
+    try:
+        if on_wait is not None:
+            on_wait(time.perf_counter() - started)
+        task = asyncio.create_task(guarded())
+    except BaseException:
+        semaphore.release()
+        raise
+    lane_tasks.add(task)
+    task.add_done_callback(_retrieve_task_outcome)
+    return await asyncio.shield(task)
+
+
 @asynccontextmanager
 async def lifespan(_app):
     """Load inference dependencies before serving requests."""
     global model, class_mapping, image_processing_semaphore, prediction_semaphore
+    global shutting_down
     model = None
     class_mapping = None
+    shutting_down = asyncio.Event()
 
     try:
         logger.info("🚀 Loading model and class mapping...")
@@ -139,7 +199,14 @@ async def lifespan(_app):
     except Exception as e:
         logger.error(f"❌ Failed to load model: {str(e)}")
         raise
-    yield
+    try:
+        yield
+    finally:
+        # Wait for owned lane work. Do not cancel it and do not drop its permit.
+        shutting_down.set()
+        pending = [task for task in list(lane_tasks) if not task.done()]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
 
 # Initialize FastAPI
@@ -173,6 +240,12 @@ async def health_check():
         return JSONResponse(status_code=503, content=payload)
     return payload
 
+
+@app.get("/metrics")
+async def metrics():
+    """Operator aggregates. Counts and durations only; no request contents."""
+    return request_metrics.snapshot()
+
 @app.post("/predict")
 async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
     """
@@ -185,80 +258,98 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
         JSON with predicted class, confidence, and top-5 predictions
     """
     if model is None or class_mapping is None:
-        raise HTTPException(status_code=503, detail="Model is not ready")
+        request_metrics.record_unavailable("model_not_ready")
+        raise HTTPException(status_code=503, detail=DETAIL_MODEL_NOT_READY)
 
     declared_image_type = (image.content_type or "").partition(";")[0].strip().lower()
     if declared_image_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="File must be a JPEG or PNG image")
+        request_metrics.record_rejection("unsupported_media_type")
+        raise HTTPException(status_code=400, detail=DETAIL_UNSUPPORTED_MEDIA)
 
     image_data = await image.read(MAX_UPLOAD_BYTES + 1)
     if not image_data:
-        raise HTTPException(status_code=400, detail="Image file is empty")
+        request_metrics.record_rejection("empty_image")
+        raise HTTPException(status_code=400, detail=DETAIL_EMPTY_IMAGE)
     if len(image_data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Image exceeds the 10 MB upload limit")
+        request_metrics.record_rejection("oversized_upload")
+        raise HTTPException(status_code=413, detail=DETAIL_OVERSIZED_UPLOAD)
+
+    async def preprocess_for_request():
+        started = time.perf_counter()
+        try:
+            return await run_in_threadpool(preprocess_image, image_data)
+        finally:
+            request_metrics.record_timing(
+                "preprocessing", time.perf_counter() - started
+            )
 
     try:
-        await asyncio.wait_for(
-            image_processing_semaphore.acquire(),
-            timeout=IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS,
+        processed_image = await run_holding_lane(
+            image_processing_semaphore,
+            IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS,
+            preprocess_for_request,
         )
     except TimeoutError as exc:
+        request_metrics.record_unavailable("image_processing_busy")
         logger.warning(
             "Image processing queue wait exceeded %.1f seconds",
             IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS,
         )
         raise HTTPException(
             status_code=503,
-            detail="Image processing queue is busy; retry later",
+            detail=DETAIL_IMAGE_BUSY,
             headers={"Retry-After": str(IMAGE_PROCESSING_RETRY_AFTER_SECONDS)},
         ) from exc
-
-    try:
-        # Do not time out this worker: threadpool work cannot be abandoned safely.
-        processed_image = await run_in_threadpool(preprocess_image, image_data)
     except ValueError as exc:
-        logger.warning("Rejected invalid image upload: %s", exc)
-        raise HTTPException(status_code=400, detail="Invalid image data") from exc
-    finally:
-        image_processing_semaphore.release()
+        request_metrics.record_rejection("invalid_image")
+        logger.warning("Rejected invalid image upload")
+        raise HTTPException(status_code=400, detail=DETAIL_INVALID_IMAGE) from exc
+
+    async def infer():
+        started = time.perf_counter()
+        try:
+            return await run_in_threadpool(
+                run_model_inference,
+                model,
+                processed_image,
+                class_mapping["index_to_class"],
+            )
+        finally:
+            request_metrics.record_timing("inference", time.perf_counter() - started)
+
+    def record_inference_wait(seconds: float) -> None:
+        request_metrics.record_timing("inference_queue_wait", seconds)
 
     try:
-        await asyncio.wait_for(
-            prediction_semaphore.acquire(),
-            timeout=PREDICTION_QUEUE_TIMEOUT_SECONDS,
+        # Do not time out this worker: TensorFlow threads cannot be abandoned safely.
+        decoded = await run_holding_lane(
+            prediction_semaphore,
+            PREDICTION_QUEUE_TIMEOUT_SECONDS,
+            infer,
+            on_wait=record_inference_wait,
         )
+        return {**decoded, "status": "success"}
+
     except TimeoutError as exc:
+        request_metrics.record_unavailable("prediction_queue_busy")
         logger.warning(
             "Prediction queue wait exceeded %.1f seconds",
             PREDICTION_QUEUE_TIMEOUT_SECONDS,
         )
         raise HTTPException(
             status_code=503,
-            detail="Prediction queue is busy; retry later",
+            detail=DETAIL_PREDICTION_BUSY,
             headers={"Retry-After": str(PREDICTION_RETRY_AFTER_SECONDS)},
         ) from exc
-
-    try:
-        # Do not time out this worker: TensorFlow threads cannot be abandoned safely.
-        decoded = await run_in_threadpool(
-            run_model_inference,
-            model,
-            processed_image,
-            class_mapping["index_to_class"],
-        )
-        return {**decoded, "status": "success"}
-
-    except Exception as e:
-        logger.exception("Prediction failed")
-        raise HTTPException(status_code=500, detail="Prediction failed") from e
-    finally:
-        prediction_semaphore.release()
+    except Exception as exc:
+        logger.error("Prediction failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Prediction failed") from exc
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """Global exception handler"""
-    logger.error(f"❌ Global exception: {str(exc)}")
+    logger.error("Global exception type=%s", type(exc).__name__)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "status": "error"}

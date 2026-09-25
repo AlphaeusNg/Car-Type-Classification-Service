@@ -60,8 +60,10 @@ if __name__ == "__main__":
     try:
         result = predict_car_type(image_path)
         print(f"Predicted: {result['predicted_class']}")
-        print(f"Confidence: {result['confidence']:.2%}")
-        print("\nTop 5 predictions:")
+        # Softmax class score only. This is not a calibrated probability
+        # that the predicted label is correct.
+        print(f"Class score: {result['confidence']:.2%}")
+        print("\nTop 5 class scores:")
         for i, pred in enumerate(result['top5_predictions'], 1):
             print(f"  {i}. {pred['class']} ({pred['confidence']:.2%})")
     except Exception as e:

@@ -192,6 +192,106 @@ mapping must contain contiguous string indices and unique, non-blank labels;
 }
 ```
 
+`confidence` is the model's softmax class score for that label. It is not a calibrated probability that the class is correct, and a higher score only means the model assigned more of its output mass to that class.
+
+### Examples
+
+Successful prediction (HTTP 200). The sample path is the checked-in Stanford
+Cars layout; use any JPEG or PNG the server is allowed to read:
+
+```bash
+curl -s -X POST "http://localhost:8000/predict" \
+     -F "image=@data/test/Acura TL Sedan 2012/000197.jpg;type=image/jpeg"
+```
+
+Unsupported upload (HTTP 400). The declared media type must be `image/jpeg` or
+`image/png` before decoding:
+
+```bash
+curl -s -X POST "http://localhost:8000/predict" \
+     -F "image=@notes.txt;type=text/plain"
+```
+
+```json
+{"detail": "File must be a JPEG or PNG image"}
+```
+
+Oversized request (HTTP 413). The body is rejected before multipart parsing
+when it is larger than 10 MiB plus the 64 KiB envelope allowance:
+
+```python
+import urllib.error
+import urllib.request
+
+request = urllib.request.Request(
+    "http://localhost:8000/predict",
+    data=b"x" * (10 * 1024 * 1024 + 64 * 1024 + 1),
+    method="POST",
+    headers={"Content-Type": "application/octet-stream"},
+)
+try:
+    urllib.request.urlopen(request)
+except urllib.error.HTTPError as exc:
+    print(exc.code)  # 413
+    print(exc.read().decode())
+    # {"detail": "Request exceeds the upload size limit"}
+```
+
+Busy model lane (HTTP 503). Retry only when `Retry-After` is present. A 503
+without that header, including `{"detail": "Model is not ready"}`, is not an
+overload retry. Image-lane overload uses the same pattern with
+`{"detail": "Image processing queue is busy; retry later"}` and
+`Retry-After: 1`. Model-lane overload uses
+`{"detail": "Prediction queue is busy; retry later"}` and `Retry-After: 5`.
+
+```python
+import time
+import urllib.error
+import urllib.request
+
+RETRYABLE = {
+    "Prediction queue is busy; retry later",
+    "Image processing queue is busy; retry later",
+}
+
+def multipart_image(image_bytes, boundary="----car-retry"):
+    # Field name, filename, and JPEG type match the /predict contract.
+    head = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="image"; filename="car.jpg"\r\n'
+        "Content-Type: image/jpeg\r\n\r\n"
+    ).encode()
+    tail = f"\r\n--{boundary}--\r\n".encode()
+    return head + image_bytes + tail, f"multipart/form-data; boundary={boundary}"
+
+def predict_with_retry(image_bytes, attempts=3):
+    body, content_type = multipart_image(image_bytes)
+    for attempt in range(attempts):
+        request = urllib.request.Request(
+            "http://localhost:8000/predict",
+            data=body,
+            method="POST",
+            headers={"Content-Type": content_type},
+        )
+        try:
+            with urllib.request.urlopen(request) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode()
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            overload = exc.code == 503 and retry_after and any(
+                message in detail for message in RETRYABLE
+            )
+            if not overload or attempt == attempts - 1:
+                raise
+            time.sleep(int(retry_after))
+```
+
+The snippet sleeps for the server's `Retry-After` value, read from the error
+response headers (`exc.headers` here, `response.headers` on other clients),
+and does not treat HTTP 200, 400, 413, or a 503 without `Retry-After` as a
+busy-model retry.
+
 At startup, model output metadata must describe a rank-two tensor with a dynamic
 or single-image batch. The API accepts inference output only when it is one
 non-empty, finite probability row whose values are between zero and one, sum to
@@ -211,6 +311,20 @@ additional prediction requests wait asynchronously for that lane for up to five
 seconds. A request that cannot acquire the model lane receives HTTP 503 with
 `Retry-After: 5`. An inference that already owns the lane is never timed out or
 abandoned, preserving exclusive access to the shared Keras model.
+
+A client cancelled while waiting for a lane does not keep that permit.
+Shutdown waits for preprocessing or inference that already holds a lane. That
+work is not abandoned and does not release the lane early. After the worker
+finishes, a later valid request can proceed. The next startup creates fresh
+lanes; do not overlap a restarted process with a worker that has not returned.
+
+`GET /metrics` returns process-lifetime aggregates and nothing else: counts and
+durations for preprocessing, inference-queue wait, and inference, plus
+rejection counts (unsupported type, empty image, oversized upload, oversized
+request, invalid image) and 503 counts (model not ready, image lane busy,
+prediction lane busy). Readiness `/health` failures are not included. The
+payload has no image bytes, filenames, or request bodies. Counts reset when
+the process restarts.
 The decoded file format must also be JPEG or PNG; renaming another image type or
 changing only its upload MIME type is rejected. JPEG orientation metadata is
 applied before resize, so phone photos reach the model in their displayed
@@ -244,6 +358,17 @@ Candidate runs live under `training_runs/<name>/` and never overwrite the
 selected runtime artifact. Choose by validation performance, evaluate the
 official test split once for final reporting, then record any deliberate local
 selection in `model_manifest.json`.
+
+See `MODEL_CARD.md` for the manifest identity, label order, split-by-split
+metrics, and limits. To compare a Keras re-export with the trusted local
+artifact without replacing it:
+
+```bash
+python3 tools/check_reexport_equivalence.py --candidate path/to/candidate.keras
+```
+
+The command requires Keras 3.10.0, reads only, and refuses to continue when
+TensorFlow or Keras cannot be imported.
 
 ### Locally selected EfficientNetV2-S (Stanford Cars official test)
 | Metric | Previous ResNet50 | Current |
