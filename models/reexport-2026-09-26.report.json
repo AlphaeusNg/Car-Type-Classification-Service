@@ -1,0 +1,117 @@
+{
+  "keras": "3.10.0",
+  "loading": {
+    "candidate_input_shape": [
+      null,
+      224,
+      224,
+      3
+    ],
+    "candidate_output_shape": [
+      null,
+      196
+    ],
+    "candidate_parameters": 20582436,
+    "passed": true,
+    "reference_input_shape": [
+      null,
+      224,
+      224,
+      3
+    ],
+    "reference_output_shape": [
+      null,
+      196
+    ],
+    "reference_parameters": 20582436
+  },
+  "passed": true,
+  "promoted": false,
+  "samples": [
+    {
+      "argmax_candidate": 0,
+      "argmax_reference": 0,
+      "max_abs_score": 0.0,
+      "max_abs_tolerance": 0.001,
+      "mean_abs_score": 0.0,
+      "mean_abs_tolerance": 0.0001,
+      "passed": true,
+      "sample": "data/test/AM General Hummer SUV 2000/000046.jpg"
+    },
+    {
+      "argmax_candidate": 3,
+      "argmax_reference": 3,
+      "max_abs_score": 0.0,
+      "max_abs_tolerance": 0.001,
+      "mean_abs_score": 0.0,
+      "mean_abs_tolerance": 0.0001,
+      "passed": true,
+      "sample": "data/test/Acura TL Sedan 2012/000197.jpg"
+    },
+    {
+      "argmax_candidate": 10,
+      "argmax_reference": 10,
+      "max_abs_score": 0.0,
+      "max_abs_tolerance": 0.001,
+      "mean_abs_score": 0.0,
+      "mean_abs_tolerance": 0.0001,
+      "passed": true,
+      "sample": "data/test/BMW M3 Coupe 2012/002744.jpg"
+    },
+    {
+      "argmax_candidate": 57,
+      "argmax_reference": 57,
+      "max_abs_score": 0.0,
+      "max_abs_tolerance": 0.001,
+      "mean_abs_score": 0.0,
+      "mean_abs_tolerance": 0.0001,
+      "passed": true,
+      "sample": "data/test/Chevrolet Corvette Convertible 2012/004425.jpg"
+    },
+    {
+      "argmax_candidate": 109,
+      "argmax_reference": 109,
+      "max_abs_score": 0.0,
+      "max_abs_tolerance": 0.001,
+      "mean_abs_score": 0.0,
+      "mean_abs_tolerance": 0.0001,
+      "passed": true,
+      "sample": "data/test/Ford F-150 Regular Cab 2012/009243.jpg"
+    },
+    {
+      "argmax_candidate": 148,
+      "argmax_reference": 148,
+      "max_abs_score": 0.0,
+      "max_abs_tolerance": 0.001,
+      "mean_abs_score": 0.0,
+      "mean_abs_tolerance": 0.0001,
+      "passed": true,
+      "sample": "data/test/Jeep Wrangler SUV 2012/011981.jpg"
+    },
+    {
+      "argmax_candidate": 184,
+      "argmax_reference": 184,
+      "max_abs_score": 0.0,
+      "max_abs_tolerance": 0.001,
+      "mean_abs_score": 0.0,
+      "mean_abs_tolerance": 0.0001,
+      "passed": true,
+      "sample": "data/test/Tesla Model S Sedan 2012/015213.jpg"
+    },
+    {
+      "argmax_candidate": 195,
+      "argmax_reference": 195,
+      "max_abs_score": 0.0,
+      "max_abs_tolerance": 0.001,
+      "mean_abs_score": 0.0,
+      "mean_abs_tolerance": 0.0001,
+      "passed": true,
+      "sample": "data/test/smart fortwo Convertible 2012/016146.jpg"
+    }
+  ],
+  "tolerances": {
+    "max_abs_score": 0.001,
+    "mean_abs_score": 0.0001,
+    "require_same_argmax": true
+  }
+}

@@ -250,10 +250,10 @@ async def metrics():
 async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
     """
     Predict car type from uploaded image
-    
+
     Args:
         image: Uploaded image file (JPEG/PNG)
-        
+
     Returns:
         JSON with predicted class, confidence, and top-5 predictions
     """

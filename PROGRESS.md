@@ -3,7 +3,18 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-25 (service Cycle 46)
+Last updated: 2026-09-26 (real non-promoted re-export verification)
+
+## Real re-export verification — 2026-09-26
+
+- Exported the manifest-verified serving model with Keras 3.10.0 / TensorFlow
+  2.19.0, `compile=False`, to a separate gitignored candidate.
+- Ran `tools/check_reexport_equivalence.py` against that actual file: all eight
+  fixed samples passed with zero score differences and matching argmax classes.
+- Saved the exact report and artifact hashes in `models/reexport-2026-09-26.report.json`
+  and `models/reexport-2026-09-26.md`. Serving weights, manifest, and class mapping
+  hashes are unchanged. No promotion, newer-Keras claim, or accuracy reevaluation.
+- Regression gate: `.venv/bin/python -m pytest -q -W error`: 161 passed.
 
 ## Current state
 
