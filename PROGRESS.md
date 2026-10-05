@@ -3,7 +3,16 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-09-26 (real non-promoted re-export verification)
+Last updated: 2026-10-05 (metrics counter independence)
+
+## Metrics counter independence — 2026-10-05
+
+- Model-free tests now snapshot `GET /metrics`, then move one counter family.
+  An unsupported-media rejection increases `rejections.unsupported_media_type`
+  and leaves every unavailable counter unchanged. A model-not-ready 503
+  increases `unavailable.model_not_ready` and leaves every rejection counter
+  unchanged. Neither the sentinel filename nor the sentinel payload appears in
+  the metrics body. No production metrics code changed.
 
 ## Real re-export verification — 2026-09-26
 

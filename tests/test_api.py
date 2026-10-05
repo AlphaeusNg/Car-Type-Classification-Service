@@ -704,6 +704,13 @@ def _zero_metrics():
     }
 
 
+def _counter_deltas(before, after, family):
+    assert set(before[family]) == set(after[family])
+    return {
+        name: after[family][name] - before[family][name] for name in before[family]
+    }
+
+
 def test_metrics_aggregate_timings_rejections_and_unavailable(client, monkeypatch, caplog):
     caplog.set_level("INFO")
     sentinel_name = "secret-private-file.png"
@@ -793,6 +800,79 @@ def test_metrics_aggregate_timings_rejections_and_unavailable(client, monkeypatc
     assert sentinel_name not in caplog.text
     assert "SENTINEL_PAYLOAD_BYTES" not in caplog.text
     assert "/private/" not in body
+
+
+def test_metrics_validation_rejection_leaves_unavailable_unchanged(client, monkeypatch):
+    sentinel_name = "secret-rejection-only.png"
+    sentinel_bytes = b"SENTINEL_REJECTION_ONLY_BYTES"
+    baseline = client.get("/metrics")
+    assert baseline.status_code == 200
+    before = baseline.json()
+
+    make_ready(monkeypatch)
+    rejected = client.post(
+        "/predict",
+        files={"image": (sentinel_name, sentinel_bytes, "image/gif")},
+    )
+    published = client.get("/metrics")
+    body = published.text
+    after = published.json()
+    rejection_deltas = _counter_deltas(before, after, "rejections")
+    unavailable_deltas = _counter_deltas(before, after, "unavailable")
+
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"] == api.DETAIL_UNSUPPORTED_MEDIA
+    assert published.status_code == 200
+    assert rejection_deltas == {
+        "unsupported_media_type": 1,
+        "empty_image": 0,
+        "oversized_upload": 0,
+        "oversized_request": 0,
+        "invalid_image": 0,
+    }
+    assert unavailable_deltas == {
+        "model_not_ready": 0,
+        "image_processing_busy": 0,
+        "prediction_queue_busy": 0,
+    }
+    assert sentinel_name not in body
+    assert "SENTINEL_REJECTION_ONLY_BYTES" not in body
+
+
+def test_metrics_model_not_ready_leaves_rejections_unchanged(client):
+    sentinel_name = "secret-not-ready-only.png"
+    sentinel_bytes = b"SENTINEL_NOT_READY_ONLY_BYTES"
+    baseline = client.get("/metrics")
+    assert baseline.status_code == 200
+    before = baseline.json()
+
+    not_ready = client.post(
+        "/predict",
+        files={"image": (sentinel_name, sentinel_bytes, "image/png")},
+    )
+    published = client.get("/metrics")
+    body = published.text
+    after = published.json()
+    rejection_deltas = _counter_deltas(before, after, "rejections")
+    unavailable_deltas = _counter_deltas(before, after, "unavailable")
+
+    assert not_ready.status_code == 503
+    assert not_ready.json()["detail"] == api.DETAIL_MODEL_NOT_READY
+    assert published.status_code == 200
+    assert unavailable_deltas == {
+        "model_not_ready": 1,
+        "image_processing_busy": 0,
+        "prediction_queue_busy": 0,
+    }
+    assert rejection_deltas == {
+        "unsupported_media_type": 0,
+        "empty_image": 0,
+        "oversized_upload": 0,
+        "oversized_request": 0,
+        "invalid_image": 0,
+    }
+    assert sentinel_name not in body
+    assert "SENTINEL_NOT_READY_ONLY_BYTES" not in body
 
 
 def test_cancelled_queue_and_shutdown_do_not_leak_capacity(monkeypatch):
