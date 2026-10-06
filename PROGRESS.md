@@ -2163,3 +2163,8 @@ security boundary.
 **Next opportunity:** Rotate to Seeking-Biblical-Truth for an exporter/sync
 reliability audit. The car service's remaining Keras upgrade still requires a
 trusted re-export and representative equivalence corpus.
+
+
+## 2026-10-07 — Distinguish readiness failures from overload
+
+The operator note maps the existing unavailable counters to artifact readiness or lane saturation, explains Retry-After and counter resets. All four README tests passed. No serving weights, manifest, dependency pins or accuracy claims changed.

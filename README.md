@@ -325,6 +325,12 @@ request, invalid image) and 503 counts (model not ready, image lane busy,
 prediction lane busy). Readiness `/health` failures are not included. The
 payload has no image bytes, filenames, or request bodies. Counts reset when
 the process restarts.
+For a rising `unavailable.model_not_ready`, check `/health` and startup logs
+for a missing, unreadable, or incompatible artifact; retrying overload will
+not repair readiness. Rising `unavailable.image_processing_busy` or
+`unavailable.prediction_queue_busy` identifies lane saturation: honor the
+response's `Retry-After` and reduce concurrent requests. Compare counter
+deltas within the same process lifetime; restarting clears the evidence.
 The decoded file format must also be JPEG or PNG; renaming another image type or
 changing only its upload MIME type is rejected. JPEG orientation metadata is
 applied before resize, so phone photos reach the model in their displayed
