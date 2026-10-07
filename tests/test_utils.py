@@ -358,3 +358,9 @@ def test_class_mapping_rejects_duplicate_json_keys(tmp_path, payload):
     path.write_text(payload, encoding="utf-8")
     with pytest.raises(ValueError, match="Duplicate key in class mapping"):
         load_class_mapping(path)
+
+def test_equal_probabilities_keep_class_index_order_with_top_k_boundary():
+    decoded = decode_predictions(np.array([[0.4, 0.4, 0.2]]), prediction_labels(), top_k=1)
+    assert decoded["predicted_class"] == "class-0"
+    decoded = decode_predictions(np.array([[0.4, 0.4, 0.2]]), prediction_labels())
+    assert [item["class"] for item in decoded["top5_predictions"]] == ["class-0", "class-1", "class-2"]

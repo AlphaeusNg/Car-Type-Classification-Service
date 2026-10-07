@@ -455,8 +455,8 @@ def test_predict_returns_ranked_classes(client, monkeypatch):
     assert [item["class"] for item in body["top5_predictions"]] == [
         "class-2",
         "class-3",
-        "class-4",
         "class-1",
+        "class-4",
         "class-0",
     ]
 

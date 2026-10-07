@@ -2178,3 +2178,7 @@ SECURITY.md records 16 distinct Keras advisories duplicated across two requireme
 ## 2026-10-07 — Reject duplicate class-mapping keys
 
 Class-mapping JSON rejects duplicate keys at every object level before mapping validation, avoiding silent overwrites of class names/indexes. The model card reserves an explicitly unavailable confusion-pair section with an evidence gate. Validation: all 165 model-free pytest checks passed. Weights, manifest and Keras 3.10.0 were unchanged; the 32 security alerts remain open.
+
+## 2026-10-07 — Make equal-probability predictions deterministic
+
+Prediction ranking now retains ascending class index when probabilities tie, including when top_k truncates the tied group. The API contract documents this choice. 166 model-free pytest tests passed, covering the API ordering and top-k boundary. Serving weights, manifest and Keras 3.10.0 remain unchanged; previously triaged alerts remain open.

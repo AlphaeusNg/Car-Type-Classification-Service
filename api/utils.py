@@ -71,7 +71,8 @@ def decode_predictions(predictions, index_to_class, top_k=5):
         raise ValueError("top_k must be a positive integer")
 
     score_row = scores[0]
-    ranked_indices = np.argsort(score_row)[-min(top_k, len(score_row)):][::-1]
+    # Equal probabilities retain class-index order across NumPy versions.
+    ranked_indices = np.argsort(-score_row, kind="stable")[:min(top_k, len(score_row))]
     predicted_idx = int(ranked_indices[0])
     return {
         "predicted_class": index_to_class[str(predicted_idx)],

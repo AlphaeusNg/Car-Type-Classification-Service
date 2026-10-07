@@ -179,6 +179,8 @@ mapping must contain contiguous string indices and unique, non-blank labels;
 `class_to_index` must be the exact integer-valued inverse with no extra entries.
 
 ### Response Format
+Equal prediction probabilities are ordered by ascending class index, including at the top-five boundary.
+
 ```json
 {
   "predicted_class": "Acura TL Sedan 2012",
