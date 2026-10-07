@@ -2168,3 +2168,8 @@ trusted re-export and representative equivalence corpus.
 ## 2026-10-07 — Distinguish readiness failures from overload
 
 The operator note maps the existing unavailable counters to artifact readiness or lane saturation, explains Retry-After and counter resets. All four README tests passed. No serving weights, manifest, dependency pins or accuracy claims changed.
+
+
+## 2026-10-07 — Document Keras exposure and the migration gate
+
+SECURITY.md records 16 distinct Keras advisories duplicated across two requirements files (32 open alerts), verified API/model-loading boundaries, and the real artifact migration/equivalence gate. Alerts remain open. Serving weights, manifest and Keras 3.10.0 were unchanged. Validation: all 163 model-free pytest checks passed against requirements-test.txt.
