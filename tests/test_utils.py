@@ -347,3 +347,14 @@ def test_load_model_reports_existing_artifact_failures(tmp_path):
 def test_load_model_reports_truly_missing_artifacts(tmp_path):
     with pytest.raises(FileNotFoundError, match="No model file found"):
         load_model(tmp_path, lambda _path, **_options: LoadedModel())
+
+
+@pytest.mark.parametrize("payload", [
+    '{"index_to_class":{"0":"first","0":"second"},"class_to_index":{"second":0}}',
+    '{"index_to_class":{"0":"first"},"index_to_class":{"0":"second"},"class_to_index":{"second":0}}',
+])
+def test_class_mapping_rejects_duplicate_json_keys(tmp_path, payload):
+    path = tmp_path / "mapping.json"
+    path.write_text(payload, encoding="utf-8")
+    with pytest.raises(ValueError, match="Duplicate key in class mapping"):
+        load_class_mapping(path)

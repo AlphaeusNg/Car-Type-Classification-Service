@@ -287,6 +287,15 @@ def validate_runtime_artifacts(loaded_model, loaded_mapping):
         raise ValueError("model output width does not match class mapping")
 
 
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate key in class mapping: {key}")
+        result[key] = value
+    return result
+
+
 def load_class_mapping(mapping_path: Path | None = None) -> Dict[str, Any]:
     """
     Load class mapping for car types
@@ -314,7 +323,7 @@ def load_class_mapping(mapping_path: Path | None = None) -> Dict[str, Any]:
     
     try:
         with open(mapping_path, "r", encoding="utf-8") as f:
-            class_mapping = json.load(f)
+            class_mapping = json.load(f, object_pairs_hook=_unique_json_object)
 
         validate_class_mapping(class_mapping)
         print(f"✅ Class mapping loaded: {len(class_mapping['index_to_class'])} classes")

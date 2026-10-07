@@ -2173,3 +2173,8 @@ The operator note maps the existing unavailable counters to artifact readiness o
 ## 2026-10-07 — Document Keras exposure and the migration gate
 
 SECURITY.md records 16 distinct Keras advisories duplicated across two requirements files (32 open alerts), verified API/model-loading boundaries, and the real artifact migration/equivalence gate. Alerts remain open. Serving weights, manifest and Keras 3.10.0 were unchanged. Validation: all 163 model-free pytest checks passed against requirements-test.txt.
+
+
+## 2026-10-07 — Reject duplicate class-mapping keys
+
+Class-mapping JSON rejects duplicate keys at every object level before mapping validation, avoiding silent overwrites of class names/indexes. The model card reserves an explicitly unavailable confusion-pair section with an evidence gate. Validation: all 165 model-free pytest checks passed. Weights, manifest and Keras 3.10.0 were unchanged; the 32 security alerts remain open.

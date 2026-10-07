@@ -191,6 +191,14 @@ previous weights (`PROGRESS.md`). It is not the manifest-selected model.
   deployed. `training_history.json` is that experimental trace, not the
   serving checkpoint's history.
 
+## Confusion pairs
+
+**Unavailable.** No evaluation artifact currently records the most confused
+class pairs for the serving checkpoint. Any future table must identify the
+model, evaluation split, image count, class order and procedure, and include
+both predicted and true labels with their counts. General observations about
+similar body styles are not measured confusion pairs.
+
 ## Limits
 
 - Official-test top-1 (`0.8188`) is much lower than the 814-image train
