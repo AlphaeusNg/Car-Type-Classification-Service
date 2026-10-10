@@ -157,7 +157,9 @@ For one local image without starting the API, update the sample path at the
 bottom of `prediction_example.py` and run `python3 prediction_example.py`.
 The example uses the same validated class mapping, JPEG/PNG pixel and EXIF
 preprocessing, model shape checks, probability decoder, and `compile=False`
-loading contract as the service.
+loading contract as the service. Default model selection uses the verified
+repository manifest, and model/mapping defaults resolve from the repository
+even when the caller uses another working directory.
 
 ## 🔌 API Usage
 

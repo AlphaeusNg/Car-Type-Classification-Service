@@ -101,3 +101,46 @@ def test_prediction_example_rejects_non_probability_outputs(tmp_path):
             mapping_path,
             model_loader=lambda _path, **_options: FakeModel([0.1, 0.2, 0.3]),
         )
+
+def test_default_prediction_uses_verified_repo_loader_from_any_directory(tmp_path, monkeypatch):
+    import prediction_example
+    from pathlib import Path
+
+    image_path, _, mapping_path = write_fixture(tmp_path)
+    calls = []
+    loader = lambda _path, **_options: FakeModel([0.1, 0.7, 0.2])
+
+    def verified_loader(*, project_root, model_loader):
+        calls.append((project_root, model_loader))
+        return FakeModel([0.1, 0.7, 0.2])
+
+    monkeypatch.setattr(prediction_example, "load_model", verified_loader)
+    monkeypatch.chdir(tmp_path)
+    result = predict_car_type(image_path, mapping_path=mapping_path, model_loader=loader)
+    assert result["predicted_class"] == "sedan"
+    assert calls == [(Path(prediction_example.__file__).resolve().parent, loader)]
+
+
+
+def test_explicit_prediction_rejects_tampered_manifest_artifact_before_loading(tmp_path):
+    import hashlib
+    from api.model_artifacts import ModelArtifactIntegrityError
+
+    image_path, _, mapping_path = write_fixture(tmp_path)
+    selected = tmp_path / "best_car_model.keras"
+    trusted = b"trusted weights"
+    selected.write_bytes(b"changed weights")
+    mapping = mapping_path.read_bytes()
+    (tmp_path / "class_mapping.json").write_bytes(mapping)
+    (tmp_path / "model_manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "artifact": {"path": selected.name, "size_bytes": len(trusted),
+                     "sha256": hashlib.sha256(trusted).hexdigest()},
+        "class_mapping": {"path": "class_mapping.json", "size_bytes": len(mapping),
+                          "sha256": hashlib.sha256(mapping).hexdigest()},
+    }), encoding="utf-8")
+    calls = []
+    with pytest.raises(ModelArtifactIntegrityError, match="SHA-256"):
+        predict_car_type(image_path, selected, mapping_path,
+                         model_loader=lambda *args, **options: calls.append(args))
+    assert calls == []

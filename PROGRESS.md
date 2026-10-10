@@ -2182,3 +2182,9 @@ Class-mapping JSON rejects duplicate keys at every object level before mapping v
 ## 2026-10-07 — Make equal-probability predictions deterministic
 
 Prediction ranking now retains ascending class index when probabilities tie, including when top_k truncates the tied group. The API contract documents this choice. 166 model-free pytest tests passed, covering the API ordering and top-k boundary. Serving weights, manifest and Keras 3.10.0 remain unchanged; previously triaged alerts remain open.
+
+## 2026-10-11 — Use the verified artifact loader in the standalone example
+
+Default model selection now uses the same manifest-aware loader as the API and resolves model/mapping defaults from the repository rather than the calling directory. Explicit model files are also checked against an adjacent manifest when present. TensorFlow remains lazy. No weights, manifest or Keras pin changed.
+
+Validation: 168 model-free pytest tests including invocation from a different working directory and rejection of tampered weights before the loader runs.

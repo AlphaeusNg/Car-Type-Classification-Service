@@ -9,6 +9,7 @@ from pathlib import Path
 from api.utils import (
     decode_predictions,
     load_class_mapping,
+    load_model,
     preprocess_image,
     validate_runtime_artifacts,
 )
@@ -16,8 +17,8 @@ from api.utils import (
 
 def predict_car_type(
     image_path,
-    model_path="best_car_model.keras",
-    mapping_path="class_mapping.json",
+    model_path=None,
+    mapping_path=None,
     *,
     model_loader=None,
 ):
@@ -26,8 +27,8 @@ def predict_car_type(
 
     Args:
         image_path: Path to the car image
-        model_path: Path to the trained model
-        mapping_path: Path to class mapping JSON
+        model_path: Optional explicit model; defaults to the repository manifest
+        mapping_path: Optional mapping; defaults to the repository class mapping
         model_loader: Optional Keras-compatible loader for testing
 
     Returns:
@@ -38,8 +39,18 @@ def predict_car_type(
 
         model_loader = tf.keras.models.load_model
 
-    model = model_loader(str(Path(model_path)), compile=False)
-    class_mapping = load_class_mapping(Path(mapping_path))
+    project_root = Path(__file__).resolve().parent
+    if model_path is None:
+        model = load_model(project_root=project_root, model_loader=model_loader)
+    else:
+        from api.model_artifacts import verify_model_artifact
+
+        selected = Path(model_path).resolve()
+        verify_model_artifact(selected, selected.parent)
+        model = model_loader(str(selected), compile=False)
+    class_mapping = load_class_mapping(
+        Path(mapping_path) if mapping_path is not None else project_root / "class_mapping.json"
+    )
     validate_runtime_artifacts(model, class_mapping)
     image_array = preprocess_image(Path(image_path).read_bytes())
     result = decode_predictions(
