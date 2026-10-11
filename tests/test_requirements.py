@@ -71,8 +71,8 @@ def test_training_tool_pins_match_audited_baseline():
     workspace = dependency_versions("requirements.txt")
 
     assert workspace["requests"] == "2.34.2"
-    assert workspace["notebook"] == "7.6.1"
-    assert workspace["jupyterlab"] == "4.6.3"
+    assert workspace["notebook"] == "7.6.3"
+    assert workspace["jupyterlab"] == "4.6.4"
     assert workspace["python-dotenv"] == "1.2.2"
     assert workspace["pytest-asyncio"] == "1.4.0"
 

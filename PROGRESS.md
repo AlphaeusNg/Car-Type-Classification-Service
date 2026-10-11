@@ -2194,3 +2194,7 @@ Validation: 168 model-free pytest tests including invocation from a different wo
 The standalone example accepts an image path plus optional --model and --mapping arguments. Missing images fail before TensorFlow loads, errors go to stderr and return exit code 1, and successful predictions return 0 with the existing softmax-score wording. Default sample/model paths resolve from the repo.
 
 Validation: 170 model-free pytest tests, including subprocess failure and successful CLI forwarding; weights/manifest/Keras pin untouched.
+
+### Notebook security follow-up — 2026-10-11
+
+Patched training-only Notebook to 7.6.3 and JupyterLab to 4.6.4 for four newly reported alerts. Isolated installation, dependency compatibility and both notebook CLI version checks passed; all 170 model-free tests passed. Serving requirements, protected Keras pin, weights and manifest remain unchanged. Maintainer advisory links are recorded in SECURITY.md.

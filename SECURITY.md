@@ -35,3 +35,9 @@ The current GitHub Dependabot report contains 32 open alerts: 16 distinct Keras 
 Do not upgrade the serving pin merely to clear alerts. Produce a candidate artifact using a patched Keras release, independently verify its provenance, and compare predictions against the current artifact on representative held-out images. Require a real load, API readiness/prediction smoke, class order and tensor-shape verification, then update artifact and manifest together. Keep the current artifact available for rollback. Re-export equivalence tooling is in `tools/check_reexport_equivalence.py`.
 
 The public image endpoint does not directly expose artifact upload, but that alone does not establish that every advisory is unreachable. No model weights, manifest, dependency pins or Dependabot dismissal state changed in this triage.
+
+## Notebook security patches — 2026-10-11
+
+The training requirements now pin Notebook 7.6.3 and JupyterLab 4.6.4. These maintainer patch releases address [clipboard cell trust](https://github.com/jupyterlab/jupyterlab/security/advisories/GHSA-6966-vjj6-99xv), [extension-uninstall argument injection](https://github.com/jupyterlab/jupyterlab/security/advisories/GHSA-3325-v43h-43rv), and [language-pack plural header execution](https://github.com/jupyterlab/jupyterlab/security/advisories/GHSA-3jqq-pw4j-pqcj). Four new Dependabot alerts affected these notebook packages on October 11.
+
+An isolated Python 3.12 environment installed the patched versions with the existing Jupyter, IPykernel and IPython pins; dependency compatibility and both CLI version checks passed. The 170 model-free tests passed. Inference requirements, Keras 3.10.0, serving weights and the model manifest remain unchanged. The Keras remediation gate above still applies.

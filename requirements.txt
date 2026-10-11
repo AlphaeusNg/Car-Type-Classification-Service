@@ -38,8 +38,8 @@ scipy==1.16.0
 # Jupyter notebook support (exact working versions)
 jupyter==1.0.0
 ipykernel==6.25.2
-notebook==7.6.1
-jupyterlab==4.6.3
+notebook==7.6.3
+jupyterlab==4.6.4
 ipython==9.4.0
 
 # Data loading and processing
