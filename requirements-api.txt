@@ -2,7 +2,7 @@
 # requirements.txt.
 tensorflow==2.19.0
 # Newer Keras releases fail to deserialize the current ignored model artifacts.
-keras==3.10.0
+keras==3.15.0
 fastapi==0.139.2
 starlette==1.6.0
 anyio==4.14.2
