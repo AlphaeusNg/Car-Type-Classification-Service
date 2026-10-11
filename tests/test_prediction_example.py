@@ -144,3 +144,25 @@ def test_explicit_prediction_rejects_tampered_manifest_artifact_before_loading(t
         predict_car_type(image_path, selected, mapping_path,
                          model_loader=lambda *args, **options: calls.append(args))
     assert calls == []
+
+def test_prediction_cli_missing_image_fails_without_loading_tensorflow(tmp_path):
+    from pathlib import Path
+    result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / "prediction_example.py"),
+                             str(tmp_path / "missing.png")], capture_output=True, text=True, cwd=tmp_path)
+    assert result.returncode == 1
+    assert "Image file does not exist" in result.stderr
+    assert result.stdout == ""
+
+
+def test_prediction_cli_reports_success_and_forwards_explicit_paths(tmp_path, monkeypatch, capsys):
+    import prediction_example
+    image, model, mapping = write_fixture(tmp_path)
+    calls = []
+    def predict(*args):
+        calls.append(args)
+        return {"predicted_class": "sedan", "confidence": 0.7,
+                "top5_predictions": [{"class": "sedan", "confidence": 0.7}]}
+    monkeypatch.setattr(prediction_example, "predict_car_type", predict)
+    assert prediction_example.main([str(image), "--model", str(model), "--mapping", str(mapping)]) == 0
+    assert calls == [(image, model, mapping)]
+    assert "Class score: 70.00%" in capsys.readouterr().out

@@ -2188,3 +2188,9 @@ Prediction ranking now retains ascending class index when probabilities tie, inc
 Default model selection now uses the same manifest-aware loader as the API and resolves model/mapping defaults from the repository rather than the calling directory. Explicit model files are also checked against an adjacent manifest when present. TensorFlow remains lazy. No weights, manifest or Keras pin changed.
 
 Validation: 168 model-free pytest tests including invocation from a different working directory and rejection of tampered weights before the loader runs.
+
+## 2026-10-11 — Accept one-image CLI inputs and report failure exits
+
+The standalone example accepts an image path plus optional --model and --mapping arguments. Missing images fail before TensorFlow loads, errors go to stderr and return exit code 1, and successful predictions return 0 with the existing softmax-score wording. Default sample/model paths resolve from the repo.
+
+Validation: 170 model-free pytest tests, including subprocess failure and successful CLI forwarding; weights/manifest/Keras pin untouched.

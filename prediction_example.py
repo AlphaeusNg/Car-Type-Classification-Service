@@ -63,20 +63,31 @@ def predict_car_type(
     return result
 
 
-# Example usage:
-if __name__ == "__main__":
-    # Test with a sample image (replace with your image path)
-    image_path = "data/test/Acura TL Sedan 2012/000197.jpg"  # Example path
+def main(argv=None):
+    import argparse
+    import sys
 
+    parser = argparse.ArgumentParser(description="Classify one local JPEG or PNG car image.")
+    parser.add_argument("image", nargs="?", type=Path,
+                        default=Path(__file__).resolve().parent / "data/test/Acura TL Sedan 2012/000197.jpg")
+    parser.add_argument("--model", type=Path, help="Explicit local model; otherwise use the repository manifest")
+    parser.add_argument("--mapping", type=Path, help="Explicit class mapping JSON")
+    args = parser.parse_args(argv)
     try:
-        result = predict_car_type(image_path)
+        if not args.image.is_file():
+            raise FileNotFoundError(f"Image file does not exist: {args.image}")
+        result = predict_car_type(args.image, args.model, args.mapping)
         print(f"Predicted: {result['predicted_class']}")
-        # Softmax class score only. This is not a calibrated probability
-        # that the predicted label is correct.
+        # A softmax score is not a calibrated probability of label correctness.
         print(f"Class score: {result['confidence']:.2%}")
         print("\nTop 5 class scores:")
-        for i, pred in enumerate(result['top5_predictions'], 1):
+        for i, pred in enumerate(result["top5_predictions"], 1):
             print(f"  {i}. {pred['class']} ({pred['confidence']:.2%})")
-    except Exception as e:
-        print(f"Error: {e}")
-        print("Make sure the image path exists and model files are available")
+        return 0
+    except Exception as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -161,6 +161,16 @@ loading contract as the service. Default model selection uses the verified
 repository manifest, and model/mapping defaults resolve from the repository
 even when the caller uses another working directory.
 
+Run a specific image without editing the example:
+
+```bash
+python3 prediction_example.py /path/to/car.jpg
+# Optional explicit local artifacts:
+python3 prediction_example.py /path/to/car.jpg --model /path/to/model.keras --mapping /path/to/mapping.json
+```
+
+Errors print to stderr and return exit status 1. A successful prediction returns 0.
+
 ## 🔌 API Usage
 
 ### Test the Service
