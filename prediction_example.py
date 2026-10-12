@@ -34,6 +34,7 @@ def predict_car_type(
     Returns:
         Dictionary with prediction results
     """
+    image_array = preprocess_image(Path(image_path).read_bytes())
     if model_loader is None:
         import tensorflow as tf
 
@@ -52,7 +53,6 @@ def predict_car_type(
         Path(mapping_path) if mapping_path is not None else project_root / "class_mapping.json"
     )
     validate_runtime_artifacts(model, class_mapping)
-    image_array = preprocess_image(Path(image_path).read_bytes())
     result = decode_predictions(
         model.predict(image_array, verbose=0),
         class_mapping["index_to_class"],

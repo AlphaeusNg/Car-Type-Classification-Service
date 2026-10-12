@@ -166,3 +166,23 @@ def test_prediction_cli_reports_success_and_forwards_explicit_paths(tmp_path, mo
     assert prediction_example.main([str(image), "--model", str(model), "--mapping", str(mapping)]) == 0
     assert calls == [(image, model, mapping)]
     assert "Class score: 70.00%" in capsys.readouterr().out
+
+@pytest.mark.parametrize("contents", [b"not an image", b"GIF89a"])
+def test_invalid_image_fails_before_model_loader(tmp_path, contents):
+    image = tmp_path / "invalid.png"
+    image.write_bytes(contents)
+    calls = []
+    with pytest.raises(ValueError, match="Failed to preprocess image"):
+        predict_car_type(image, tmp_path / "missing.keras", model_loader=lambda *args, **kwargs: calls.append(args))
+    assert calls == []
+
+def test_invalid_image_cli_fails_before_tensorflow_import(tmp_path):
+    from pathlib import Path
+    image = tmp_path / "invalid.png"
+    image.write_bytes(b"not an image")
+    result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / "prediction_example.py"), str(image)],
+                            capture_output=True, text=True, cwd=tmp_path)
+    assert result.returncode == 1
+    assert "Failed to preprocess image" in result.stderr
+    assert "tensorflow" not in result.stderr.lower()
+    assert result.stdout == ""

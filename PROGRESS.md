@@ -2198,3 +2198,9 @@ Validation: 170 model-free pytest tests, including subprocess failure and succes
 ### Notebook security follow-up — 2026-10-11
 
 Patched training-only Notebook to 7.6.3 and JupyterLab to 4.6.4 for four newly reported alerts. Isolated installation, dependency compatibility and both notebook CLI version checks passed; all 170 model-free tests passed. Serving requirements, protected Keras pin, weights and manifest remain unchanged. Maintainer advisory links are recorded in SECURITY.md.
+
+## 2026-10-13 — Validate prediction images before loading the model
+
+Standalone prediction validates and preprocesses the image before importing TensorFlow or loading weights. Invalid files fail promptly with the shared image error and nonzero CLI exit. Serving weights, manifest and Keras pin stay unchanged.
+
+Validation: 173 model-free pytest tests passed, including invalid-image CLI and no-loader-call fixtures.
