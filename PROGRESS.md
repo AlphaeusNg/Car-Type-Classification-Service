@@ -3,7 +3,7 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-10-13 (launcher failure exits)
+Last updated: 2026-10-14 (structured prediction CLI)
 
 ## Metrics counter independence — 2026-10-05
 
@@ -2217,3 +2217,21 @@ continue to exit 0. README records this CLI contract.
 Validation: eleven new model-free cases failed before the fix, then all 184
 warning-strict pytest cases passed. Dependency consistency and full Python
 compilation passed. Weights, manifest and Keras 3.10.0 remain unchanged.
+
+## 2026-10-14 — Add structured local prediction output
+
+Researched Python's official JSON, argparse and stdout-redirection contracts
+and wrote docs/FEATURE_ROADMAP.md before implementation. The prediction CLI now
+accepts --json for one versioned result document and --top-k 1–196 for ranked
+candidates. In JSON mode Python loader diagnostics go to stderr. Serialization
+finishes before output and rejects non-finite numbers; errors leave stdout
+empty and retain nonzero exits. Unicode labels round-trip correctly. The shared
+decoder retains deterministic ties and mapping-size truncation. Existing API
+and default human output remain compatible; Python return keys stay unchanged.
+
+Validation: all 197 warning-strict model-free pytest tests passed, including
+clean subprocess JSON/Unicode, top-k rejection before inference, actual shared
+ranking, missing/invalid inputs, model failures and serialization failures.
+Dependency consistency and full Python compilation passed. Serving weights,
+manifest, dependency pins and accuracy claims are unchanged. Native runtime
+output is outside Python stdout redirection; no trained model was loaded.

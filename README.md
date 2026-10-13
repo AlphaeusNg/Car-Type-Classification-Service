@@ -155,8 +155,8 @@ or SHA-256 mismatch in either the weights or `class_mapping.json` fails closed
 before Keras deserialization. To select an H5 artifact for local use, update the
 manifest's artifact record deliberately; Docker remains `.keras`-only.
 
-For one local image without starting the API, update the sample path at the
-bottom of `prediction_example.py` and run `python3 prediction_example.py`.
+For one local image without starting the API, run
+`python3 prediction_example.py /path/to/car.jpg`.
 The example uses the same validated class mapping, JPEG/PNG pixel and EXIF
 preprocessing, model shape checks, probability decoder, and `compile=False`
 loading contract as the service. Default model selection uses the verified
@@ -172,6 +172,27 @@ python3 prediction_example.py /path/to/car.jpg --model /path/to/model.keras --ma
 ```
 
 Errors print to stderr and return exit status 1. A successful prediction returns 0.
+
+For scripts, save a machine-readable result and choose the number of candidates:
+
+```bash
+python3 prediction_example.py /path/to/car.jpg --json --top-k 3 > prediction.json
+python3 -m json.tool prediction.json
+```
+
+`--json` writes one object with `schema_version: 1`, `status: "success"`,
+`predicted_class`, `class_index`, `confidence`, and `top_predictions` (each item
+has `class` and `confidence`). Loader progress and errors go to stderr. Input,
+model and serialization failures leave stdout empty and exit 1. Invalid options
+exit 2. Output contains class labels and scores, without artifact or image paths.
+JSON preserves Unicode labels and rejects non-finite numbers.
+
+`--top-k` accepts 1–196 (default 5) in human and JSON modes. Results contain at
+most the mapping's class count; equal scores retain ascending class index.
+Scores remain softmax scores, not calibrated probabilities of correctness.
+The Python helper retains its historical `top5_predictions` key even when its
+optional `top_k` argument changes the candidate count. HTTP output stays unchanged.
+See [the feature roadmap](docs/FEATURE_ROADMAP.md) for research and next priorities.
 
 ## 🔌 API Usage
 
