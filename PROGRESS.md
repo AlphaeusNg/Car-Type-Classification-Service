@@ -3,7 +3,7 @@
 This file tracks current status, prioritized opportunities, verification, and
 completed autonomous improvement cycles.
 
-Last updated: 2026-10-05 (metrics counter independence)
+Last updated: 2026-10-13 (launcher failure exits)
 
 ## Metrics counter independence — 2026-10-05
 
@@ -2204,3 +2204,16 @@ Patched training-only Notebook to 7.6.3 and JupyterLab to 4.6.4 for four newly r
 Standalone prediction validates and preprocesses the image before importing TensorFlow or loading weights. Invalid files fail promptly with the shared image error and nonzero CLI exit. Serving weights, manifest and Keras pin stay unchanged.
 
 Validation: 173 model-free pytest tests passed, including invalid-image CLI and no-loader-call fixtures.
+
+## 2026-10-13 — Propagate launcher failure exits
+
+The run.py entry point now returns exit status 1 when model preflight, Docker
+build, or a server launch reports failure. Explicit local/Docker/build modes
+and automatic mode preserve their operation's result instead of exiting 0.
+Automatic Docker mode stops after a failed build instead of attempting to run
+an existing image. Setup-only completion and normal interactive server stops
+continue to exit 0. README records this CLI contract.
+
+Validation: eleven new model-free cases failed before the fix, then all 184
+warning-strict pytest cases passed. Dependency consistency and full Python
+compilation passed. Weights, manifest and Keras 3.10.0 remain unchanged.

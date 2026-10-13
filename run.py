@@ -364,16 +364,15 @@ def auto_setup_and_run():
         response = input(f"{Colors.YELLOW}Run in Docker (d) or Local (l)? [l]: {Colors.END}")
         
         if response.lower() == 'd':
-            build_docker()
-            run_docker_api()
+            if not build_docker():
+                return False
+            return run_docker_api()
         else:
-            run_local_api()
+            return run_local_api()
     else:
         if not docker_available:
             print(f"{Colors.YELLOW}💡 Docker not available, running locally{Colors.END}")
-        run_local_api()
-    
-    return True
+        return run_local_api()
 
 def main():
     """Main function"""
@@ -411,19 +410,21 @@ Examples:
     # Handle different modes
     if args.setup:
         setup_project(skip_docker=args.skip_docker)
+        return 0
     elif args.build:
         check_requirements(skip_docker=False)
-        build_docker()
+        succeeded = build_docker()
     elif args.mode == 'local':
         check_requirements(skip_docker=True)
         setup_environment()
-        run_local_api(port=args.port, reload=not args.no_reload)
+        succeeded = run_local_api(port=args.port, reload=not args.no_reload)
     elif args.mode == 'docker':
         check_requirements(skip_docker=False)
-        run_docker_api(port=args.port)
+        succeeded = run_docker_api(port=args.port)
     else:
         # Auto setup and run mode (default)
-        auto_setup_and_run()
+        succeeded = auto_setup_and_run()
+    return 0 if succeeded else 1
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

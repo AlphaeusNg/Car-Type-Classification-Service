@@ -96,6 +96,8 @@ python3 run.py --mode docker   # Docker deployment
 
 The API runs at **http://localhost:8000** after the selected artifact passes
 its manifest integrity check.
+Build and launch failures return exit status 1. Successful completion or an
+interactive server stop returns 0. Auto mode stops if its Docker build fails.
 
 ### Run tests
 

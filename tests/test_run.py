@@ -188,3 +188,40 @@ def test_run_command_rejects_shell_strings():
         assert "argument sequence" in str(error)
     else:
         raise AssertionError("shell string should be rejected")
+
+
+@pytest.mark.parametrize(
+    "arguments, operation",
+    [(["--build"], "build_docker"),
+     (["--mode", "local"], "run_local_api"),
+     (["--mode", "docker"], "run_docker_api"),
+     ([], "auto_setup_and_run")],
+)
+@pytest.mark.parametrize("succeeded", [False, True])
+def test_cli_returns_launch_outcome(monkeypatch, arguments, operation, succeeded):
+    monkeypatch.setattr(run, "check_requirements", lambda **_kwargs: True)
+    monkeypatch.setattr(run, "setup_environment", lambda: None)
+    monkeypatch.setattr(run, operation, lambda **_kwargs: succeeded)
+    monkeypatch.setattr("sys.argv", ["run.py", *arguments])
+
+    assert run.main() == (0 if succeeded else 1)
+
+
+@pytest.mark.parametrize("deployment", ["local", "docker", "failed_build"])
+def test_auto_setup_propagates_failure(monkeypatch, deployment):
+    monkeypatch.setattr(run, "check_requirements", lambda **_kwargs: True)
+    monkeypatch.setattr(run, "setup_environment", lambda: None)
+    monkeypatch.setattr(run, "find_model_artifact", lambda: Path("best_car_model.keras"))
+    monkeypatch.setattr(run, "CLASS_MAPPING_PATH", Path(__file__))
+    monkeypatch.setattr(run.shutil, "which", lambda _name: "/usr/bin/docker")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "l" if deployment == "local" else "d")
+    monkeypatch.setattr(run, "run_local_api", lambda: False)
+    monkeypatch.setattr(run, "build_docker", lambda: deployment != "failed_build")
+
+    def launch_docker():
+        assert deployment != "failed_build", "must not launch after a failed build"
+        return False
+
+    monkeypatch.setattr(run, "run_docker_api", launch_docker)
+
+    assert run.auto_setup_and_run() is False
