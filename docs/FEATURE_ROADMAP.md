@@ -55,3 +55,19 @@ Acceptance criteria:
 
 This increment implements only the selected local CLI feature. Batch serving,
 new public API surfaces and artifact promotion require separate design work.
+
+## Implementation validation
+
+Implemented --json and --top-k with 197 passing warning-strict model-free tests,
+including subprocess Unicode output, stable ranking and clean failure streams.
+Dependency consistency and full Python compilation passed.
+
+A subsequent coordinator smoke authenticated the existing serving artifact
+against its manifest and used the primary TensorFlow environment to classify
+an existing JPEG with explicit model/mapping paths and --json --top-k 3, with
+CUDA_VISIBLE_DEVICES empty. Exit status was 0 and parsing all stdout as one JSON
+document passed. Schema/status, three ranked candidates, score ranges and
+top-class consistency were checked. Runtime diagnostics appeared on stderr in
+this observed run. This evidence supplements, without removing, the generic
+Python-redirection limitation for arbitrary native writes. Local evidence:
+/tmp/features-20261013-classifier-real/stdout.json and stderr.log.

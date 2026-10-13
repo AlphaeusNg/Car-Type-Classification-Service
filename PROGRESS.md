@@ -2234,4 +2234,19 @@ clean subprocess JSON/Unicode, top-k rejection before inference, actual shared
 ranking, missing/invalid inputs, model failures and serialization failures.
 Dependency consistency and full Python compilation passed. Serving weights,
 manifest, dependency pins and accuracy claims are unchanged. Native runtime
-output is outside Python stdout redirection; no trained model was loaded.
+output is outside Python stdout redirection; the initial model-free gate did
+not load trained weights.
+
+### Actual artifact CLI verification
+
+The coordinator subsequently authenticated the existing primary serving artifact
+against its manifest and ran this isolated CLI with the primary TensorFlow
+environment, explicit existing model/mapping paths, an existing test JPEG,
+--json --top-k 3 and CUDA_VISIBLE_DEVICES empty. The process exited 0; parsing
+the entire stdout as JSON succeeded. Schema v1, success status, three ranked
+results, score ranges and top-class consistency passed. Python loader progress
+and observed TensorFlow diagnostics appeared on stderr. This verifies clean JSON
+for the tested real runtime; Python redirection still cannot guarantee capture
+of arbitrary native writes. Evidence remains in
+/tmp/features-20261013-classifier-real/stdout.json and stderr.log. No artifact,
+manifest or dependency changes were needed.
