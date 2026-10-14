@@ -4,8 +4,6 @@ A production-ready deep learning service that classifies car images into 196 car
 
 ## 🎯 Overview
 
-This service classifies car images into 196 different car types using transfer learning with an EfficientNetV2-S backbone:
-
 - **🧠 Model**: EfficientNetV2-S + transfer learning (TensorFlow 2.19.0 / Keras 3.10.0)
 - **📊 Dataset**: Stanford Cars (196 classes, 16K+ images)
 - **🚀 API**: FastAPI with `/predict` endpoint
@@ -76,7 +74,7 @@ describe a Git push as a model deployment: the weights remain gitignored and
 must be placed on each host or included in a locally built container.
 
 Training requires a detected GPU by default and uses mixed precision there.
-For an intentionally slower CPU run, opt in explicitly with `--allow-cpu`; the
+Opt in explicitly with `--allow-cpu` for an intentionally slower CPU run; the
 tool then uses float32. `--batch-size` defaults to 16 to keep memory demand
 reasonable. To evaluate an existing isolated checkpoint, use:
 
@@ -152,11 +150,10 @@ docker build -t car-type-clf .
 The selected default artifact is checked against `model_manifest.json` before
 local launch, before a Docker build, and again during container startup. A size
 or SHA-256 mismatch in either the weights or `class_mapping.json` fails closed
-before Keras deserialization. To select an H5 artifact for local use, update the
-manifest's artifact record deliberately; Docker remains `.keras`-only.
+before Keras deserialization. Update the manifest's artifact record deliberately to select an H5 artifact
+for local use; Docker remains `.keras`-only.
 
-For one local image without starting the API, run
-`python3 prediction_example.py /path/to/car.jpg`.
+Run `python3 prediction_example.py` to classify the sample image named in that file, without starting the API.
 The example uses the same validated class mapping, JPEG/PNG pixel and EXIF
 preprocessing, model shape checks, probability decoder, and `compile=False`
 loading contract as the service. Default model selection uses the verified
@@ -362,8 +359,8 @@ request, invalid image) and 503 counts (model not ready, image lane busy,
 prediction lane busy). Readiness `/health` failures are not included. The
 payload has no image bytes, filenames, or request bodies. Counts reset when
 the process restarts.
-For a rising `unavailable.model_not_ready`, check `/health` and startup logs
-for a missing, unreadable, or incompatible artifact; retrying overload will
+Check `/health` and startup logs for a missing, unreadable, or incompatible
+artifact when `unavailable.model_not_ready` is rising; retrying overload will
 not repair readiness. Rising `unavailable.image_processing_busy` or
 `unavailable.prediction_queue_busy` identifies lane saturation: honor the
 response's `Retry-After` and reduce concurrent requests. Compare counter
@@ -496,7 +493,7 @@ export CUDA_VISIBLE_DEVICES=""
 - 🎯 **8,144 training** + **8,041 test** images
 - 📥 Download from [Kaggle](https://www.kaggle.com/datasets/cyizhuo/stanford-cars-by-classes-folder)
 
-*Note: Dataset not included due to size/licensing*
+Dataset not included due to size/licensing.
 
 ---
 
@@ -513,4 +510,4 @@ GNU General Public License v3.0 — see the [LICENSE](LICENSE) file.
 
 ## 📞 Contact
 
-For questions or support, please open an issue in the GitHub repository.
+Open a GitHub issue for questions.
