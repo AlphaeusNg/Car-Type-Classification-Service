@@ -166,7 +166,9 @@ def test_prediction_cli_reports_success_and_forwards_explicit_paths(tmp_path, mo
     monkeypatch.setattr(prediction_example, "predict_car_type", predict)
     assert prediction_example.main([str(image), "--model", str(model), "--mapping", str(mapping)]) == 0
     assert calls == [(image, model, mapping)]
-    assert "Class score: 70.00%" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "Class score: 70.00%" in output
+    assert "Top 1 class scores:" in output
 
 @pytest.mark.parametrize("contents", [b"not an image", b"GIF89a"])
 def test_invalid_image_fails_before_model_loader(tmp_path, contents):
@@ -304,3 +306,12 @@ def test_json_cli_model_failure_redirects_diagnostics(tmp_path, monkeypatch, cap
     output = capsys.readouterr()
     assert output.out == ""
     assert output.err == "model progress\nError: model unavailable\n"
+
+
+@pytest.mark.parametrize("top_k", [0, -1, True, 1.5, "3"])
+def test_python_prediction_rejects_invalid_top_k_before_image_or_model_work(tmp_path, top_k):
+    calls = []
+    with pytest.raises(ValueError, match="top_k must be a positive integer"):
+        predict_car_type(tmp_path / "missing.png", top_k=top_k,
+                         model_loader=lambda *args, **kwargs: calls.append(args))
+    assert calls == []

@@ -2250,3 +2250,10 @@ for the tested real runtime; Python redirection still cannot guarantee capture
 of arbitrary native writes. Evidence remains in
 /tmp/features-20261013-classifier-real/stdout.json and stderr.log. No artifact,
 manifest or dependency changes were needed.
+
+
+## 2026-10-16 — Reject invalid Python ranking options before loading
+
+The Python prediction helper validates top_k before reading an image, importing TensorFlow or loading weights, matching the CLI’s early-rejection behavior. Five invalid-input regressions reproduce the old image-first failure. Human output now labels the actual candidate count when the class mapping is smaller than the requested top-k. Weights, manifest and Keras 3.10.0 remain unchanged.
+
+Validation: all 202 model-free pytest cases and Python compilation passed; five new invalid-option cases failed before the fix. No artifact or dependency mutation.

@@ -36,6 +36,8 @@ def predict_car_type(
     Returns:
         Dictionary with prediction results
     """
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
+        raise ValueError("top_k must be a positive integer")
     image_array = preprocess_image(Path(image_path).read_bytes())
     if model_loader is None:
         import tensorflow as tf
@@ -101,7 +103,7 @@ def main(argv=None):
         print(f"Predicted: {result['predicted_class']}")
         # A softmax score is not a calibrated probability of label correctness.
         print(f"Class score: {result['confidence']:.2%}")
-        print(f"\nTop {args.top_k} class scores:")
+        print(f"\nTop {len(result['top5_predictions'])} class scores:")
         for i, pred in enumerate(result["top5_predictions"], 1):
             print(f"  {i}. {pred['class']} ({pred['confidence']:.2%})")
         return 0
