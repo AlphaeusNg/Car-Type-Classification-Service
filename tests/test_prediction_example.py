@@ -315,3 +315,15 @@ def test_python_prediction_rejects_invalid_top_k_before_image_or_model_work(tmp_
         predict_car_type(tmp_path / "missing.png", top_k=top_k,
                          model_loader=lambda *args, **kwargs: calls.append(args))
     assert calls == []
+
+
+def test_prediction_rejects_oversized_local_input_before_decoding_or_loading(tmp_path, monkeypatch):
+    import prediction_example
+    image = tmp_path / "oversized.png"
+    with image.open("wb") as output:
+        output.truncate(10 * 1024 * 1024 + 1)
+    calls = []
+    monkeypatch.setattr(prediction_example, "preprocess_image", lambda data: calls.append("decode"))
+    with pytest.raises(ValueError, match="10 MiB"):
+        predict_car_type(image, model_loader=lambda *args, **kwargs: calls.append("model"))
+    assert calls == []

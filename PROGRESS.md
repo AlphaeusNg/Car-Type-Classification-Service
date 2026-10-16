@@ -2257,3 +2257,10 @@ manifest or dependency changes were needed.
 The Python prediction helper validates top_k before reading an image, importing TensorFlow or loading weights, matching the CLI’s early-rejection behavior. Five invalid-input regressions reproduce the old image-first failure. Human output now labels the actual candidate count when the class mapping is smaller than the requested top-k. Weights, manifest and Keras 3.10.0 remain unchanged.
 
 Validation: all 202 model-free pytest cases and Python compilation passed; five new invalid-option cases failed before the fix. No artifact or dependency mutation.
+
+
+## 2026-10-17 — Bound local prediction image reads
+
+Standalone Python/CLI input now reads at most 10 MiB plus one byte, rejecting oversize before decoding, TensorFlow import or model loading. This also bounds a file that grows during the read. README documents the limit. Weights, manifest, Keras pin and HTTP contract are unchanged.
+
+Validation: All 203 model-free pytest cases and Python compilation passed, including oversized sparse input rejected before decoding or model loading.

@@ -168,6 +168,8 @@ python3 prediction_example.py /path/to/car.jpg
 python3 prediction_example.py /path/to/car.jpg --model /path/to/model.keras --mapping /path/to/mapping.json
 ```
 
+Local JPEG/PNG inputs are limited to 10 MiB. Oversized files fail before decoding or model loading.
+
 Errors print to stderr and return exit status 1. A successful prediction returns 0.
 
 For scripts, save a machine-readable result and choose the number of candidates:

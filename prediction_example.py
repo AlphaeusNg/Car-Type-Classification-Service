@@ -38,7 +38,14 @@ def predict_car_type(
     """
     if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
         raise ValueError("top_k must be a positive integer")
-    image_array = preprocess_image(Path(image_path).read_bytes())
+    # Bound reads as well as decoded pixels; a large or growing file must not
+    # allocate unbounded memory before image validation can run.
+    max_bytes = 10 * 1024 * 1024
+    with Path(image_path).open("rb") as image_file:
+        image_data = image_file.read(max_bytes + 1)
+    if len(image_data) > max_bytes:
+        raise ValueError("Image exceeds the 10 MiB local input limit")
+    image_array = preprocess_image(image_data)
     if model_loader is None:
         import tensorflow as tf
 
