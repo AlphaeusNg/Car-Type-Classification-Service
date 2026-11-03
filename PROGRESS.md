@@ -2278,3 +2278,24 @@ Validation: all 204 warning-strict model-free pytest cases, dependency
 consistency and Python compilation passed. The new shutdown regression failed
 before the fix; existing cancellation, draining and restart tests pass. Serving
 weights, manifest and Keras 3.10.0 remain unchanged.
+
+
+## 2026-11-04 — Patch Pillow image decoding across all dependency scopes
+
+Pinned Pillow 13.0.0 in the API, test and complete-workspace requirements, with
+aligned dependency-contract checks. The official release addresses the current
+Pillow advisories, including the five critical advisory IDs reported across
+all three manifests (15 alert instances). Sources:
+https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html and
+https://github.com/advisories/GHSA-5x8w-8jj5-q52h.
+Pillow 13 drops Python 3.10; updated the stale workspace requirement comment.
+The project continues recommending/testing Python 3.12. Removed the README's
+old blanket test-dependency all-clear claim; other dependency advisories remain.
+
+Validation: installed the published Pillow 13.0.0 wheel in the existing Python
+3.12 environment; all 204 warning-strict model-free tests, pip check and Python
+compilation passed. A real CPU CLI prediction loaded the unchanged artifact
+through its manifest, preprocessed an existing test JPEG and emitted one valid
+schema-v1 JSON success with three ranked scores. Evidence:
+/tmp/classifier-pillow-real.json and /tmp/classifier-pillow-real.stderr.
+Keras 3.10.0, TensorFlow 2.19.0, serving weights, mapping and manifest are unchanged.

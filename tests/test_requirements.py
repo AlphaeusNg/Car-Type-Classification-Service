@@ -52,7 +52,7 @@ def test_audited_runtime_and_test_pins_stay_aligned():
         "starlette": "1.6.0",
         "anyio": "4.14.2",
         "python-multipart": "0.0.32",
-        "pillow": "12.3.0",
+        "pillow": "13.0.0",
         "keras": "3.10.0",
         "pytest": "9.1.1",
     }

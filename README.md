@@ -118,8 +118,11 @@ Dependency manifests are intentionally scoped:
 - `requirements-test.txt`: fast model-free contract tests and CI.
 - `requirements.txt`: complete training, notebook, analysis, and API workspace.
 
-The lightweight test dependency graph currently audits with no known
-vulnerabilities. Keras remains pinned to 3.10.0 because the real `.keras` and H5
+Pillow is pinned to 13.0.0 across the inference, test and full-workspace
+requirements to address the upstream image-decoder security advisories. It
+requires Python 3.11 or later; this project recommends and tests Python 3.12.
+This upgrade does not resolve advisories in other dependencies.
+Keras remains pinned to 3.10.0 because the real `.keras` and H5
 artifacts fail to deserialize under 3.11.3, 3.12.3, and 3.15.0. Load only trusted
 model artifacts; re-export and a real readiness smoke are required before that
 pin can be raised. The current audit status and remaining advisories are tracked
