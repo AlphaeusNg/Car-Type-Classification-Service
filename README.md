@@ -206,6 +206,9 @@ curl -X POST "http://localhost:8000/predict" \
      -F "image=@data/test/Acura TL Sedan 2012/000197.jpg"
 ```
 
+`/health` also returns HTTP 503 once shutdown starts. New prediction requests
+receive the existing model-not-ready response while admitted lane work drains.
+
 `/health` is a readiness check: it returns HTTP 503 until both the model and
 class mapping are loaded, input/output shapes match preprocessing and class
 labels, and then returns HTTP 200 with `"status": "healthy"`. The persisted

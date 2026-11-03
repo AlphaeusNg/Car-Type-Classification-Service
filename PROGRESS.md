@@ -2264,3 +2264,17 @@ Validation: all 202 model-free pytest cases and Python compilation passed; five 
 Standalone Python/CLI input now reads at most 10 MiB plus one byte, rejecting oversize before decoding, TensorFlow import or model loading. This also bounds a file that grows during the read. README documents the limit. Weights, manifest, Keras pin and HTTP contract are unchanged.
 
 Validation: All 203 model-free pytest cases and Python compilation passed, including oversized sparse input rejected before decoding or model loading.
+
+## 2026-11-04 — Stop admitting predictions during shutdown
+
+Readiness now returns HTTP 503 after shutdown begins, even while the loaded
+model and mapping remain present for lane workers. Fresh prediction requests
+receive the existing model-not-ready response before image preprocessing.
+Already admitted lane work retains the existing drain behavior; startup clears
+the shutdown event and later lifespans accept predictions again. README records
+the shutdown contract without changing response keys or error wording.
+
+Validation: all 204 warning-strict model-free pytest cases, dependency
+consistency and Python compilation passed. The new shutdown regression failed
+before the fix; existing cancellation, draining and restart tests pass. Serving
+weights, manifest and Keras 3.10.0 remain unchanged.

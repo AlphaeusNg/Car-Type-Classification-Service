@@ -229,7 +229,7 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Readiness check for the model and class mapping."""
-    ready = model is not None and class_mapping is not None
+    ready = model is not None and class_mapping is not None and not shutting_down.is_set()
     payload = {
         "status": "healthy" if ready else "unavailable",
         "model_loaded": model is not None,
@@ -257,7 +257,7 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
     Returns:
         JSON with predicted class, confidence, and top-5 predictions
     """
-    if model is None or class_mapping is None:
+    if model is None or class_mapping is None or shutting_down.is_set():
         request_metrics.record_unavailable("model_not_ready")
         raise HTTPException(status_code=503, detail=DETAIL_MODEL_NOT_READY)
 

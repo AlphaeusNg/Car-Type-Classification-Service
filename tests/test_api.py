@@ -95,6 +95,7 @@ class BlockingPreprocessor:
 def reset_runtime(monkeypatch):
     monkeypatch.setattr(api, "model", None)
     monkeypatch.setattr(api, "class_mapping", None)
+    monkeypatch.setattr(api, "shutting_down", asyncio.Event())
     api.request_metrics.reset()
     api.lane_tasks.clear()
 
@@ -147,6 +148,28 @@ def test_health_reports_ready_model(client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
     assert response.json()["total_classes"] == 5
+
+
+def test_shutdown_is_not_ready_and_rejects_new_prediction_work(client, monkeypatch):
+    make_ready(monkeypatch)
+    api.shutting_down.set()
+
+    def unexpected_preprocess(_data):
+        pytest.fail("new preprocessing must not start while shutdown drains lanes")
+
+    monkeypatch.setattr(api, "preprocess_image", unexpected_preprocess)
+    health = client.get("/health")
+    prediction = client.post(
+        "/predict", files={"image": ("car.png", b"image", "image/png")}
+    )
+
+    assert health.status_code == 503
+    assert health.json()["status"] == "unavailable"
+    assert health.json()["model_loaded"] is True
+    assert health.json()["class_mapping_loaded"] is True
+    assert prediction.status_code == 503
+    assert prediction.json()["detail"] == api.DETAIL_MODEL_NOT_READY
+    assert api.request_metrics.snapshot()["unavailable"]["model_not_ready"] == 1
 
 
 def test_lifespan_loads_dependencies_before_serving(monkeypatch):
