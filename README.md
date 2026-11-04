@@ -279,6 +279,10 @@ except urllib.error.HTTPError as exc:
     # {"detail": "Request exceeds the upload size limit"}
 ```
 
+Queue overload responses apply only while waiting for a lane permit. A timeout
+inside preprocessing or inference is an internal failure (HTTP 500), without
+a retry hint or an increment to the lane-busy counters.
+
 Busy model lane (HTTP 503). Retry only when `Retry-After` is present. A 503
 without that header, including `{"detail": "Model is not ready"}`, is not an
 overload retry. Image-lane overload uses the same pattern with

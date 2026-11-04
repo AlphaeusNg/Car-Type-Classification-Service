@@ -2299,3 +2299,17 @@ through its manifest, preprocessed an existing test JPEG and emitted one valid
 schema-v1 JSON success with three ranked scores. Evidence:
 /tmp/classifier-pillow-real.json and /tmp/classifier-pillow-real.stderr.
 Keras 3.10.0, TensorFlow 2.19.0, serving weights, mapping and manifest are unchanged.
+
+
+## 2026-11-05 — Distinguish lane saturation from worker timeouts
+
+Queue acquisition now raises a dedicated internal timeout type. A TimeoutError
+from preprocessing or model inference follows the internal-failure path (HTTP
+500), without Retry-After or a false lane-busy count. Actual queue saturation
+retains its existing HTTP 503 response, retry guidance, timing and cancellation
+behavior. README documents the distinction.
+
+Validation: both worker-timeout regressions reproduced false 503 responses on
+the previous code; all 206 warning-strict model-free pytest cases, pip check
+and Python compilation passed after the fix. Existing saturation/cancellation/
+shutdown journeys pass. Weights, manifest, mapping and Keras pin are unchanged.

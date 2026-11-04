@@ -71,6 +71,10 @@ lane_tasks: set[asyncio.Task] = set()
 shutting_down = asyncio.Event()
 
 
+class LaneQueueTimeout(TimeoutError):
+    """A lane permit was unavailable within its queue budget."""
+
+
 class RequestBodyTooLarge(Exception):
     """Internal signal raised before multipart parsing exceeds its budget."""
 
@@ -152,7 +156,11 @@ async def run_holding_lane(semaphore, timeout, operation, on_wait=None):
     started = time.perf_counter()
     try:
         await asyncio.wait_for(semaphore.acquire(), timeout=timeout)
-    except (asyncio.CancelledError, TimeoutError):
+    except TimeoutError as exc:
+        if on_wait is not None:
+            on_wait(time.perf_counter() - started)
+        raise LaneQueueTimeout from exc
+    except asyncio.CancelledError:
         if on_wait is not None:
             on_wait(time.perf_counter() - started)
         raise
@@ -289,7 +297,7 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
             IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS,
             preprocess_for_request,
         )
-    except TimeoutError as exc:
+    except LaneQueueTimeout as exc:
         request_metrics.record_unavailable("image_processing_busy")
         logger.warning(
             "Image processing queue wait exceeded %.1f seconds",
@@ -330,7 +338,7 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
         )
         return {**decoded, "status": "success"}
 
-    except TimeoutError as exc:
+    except LaneQueueTimeout as exc:
         request_metrics.record_unavailable("prediction_queue_busy")
         logger.warning(
             "Prediction queue wait exceeded %.1f seconds",

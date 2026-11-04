@@ -1007,3 +1007,29 @@ def test_cancelled_queue_and_shutdown_do_not_leak_capacity(monkeypatch):
         assert loaded_model.max_active_predictions == 1
 
     asyncio.run(scenario())
+
+
+def test_model_timeout_is_not_reported_as_queue_saturation(client, monkeypatch):
+    make_ready(monkeypatch)
+    monkeypatch.setattr(api, "model", FakeModel(error=TimeoutError("internal model timeout")))
+    response = client.post("/predict", files={"image": ("car.jpg", b"image", "image/jpeg")})
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Prediction failed"}
+    assert "retry-after" not in response.headers
+    metrics = api.request_metrics.snapshot()
+    assert metrics["unavailable"]["prediction_queue_busy"] == 0
+    assert metrics["timings"]["inference"]["count"] == 1
+
+
+def test_preprocessing_timeout_is_not_reported_as_queue_saturation(monkeypatch):
+    make_ready(monkeypatch)
+
+    def fail(_data):
+        raise TimeoutError("internal preprocessing timeout")
+
+    monkeypatch.setattr(api, "preprocess_image", fail)
+    client = TestClient(api.app, raise_server_exceptions=False)
+    response = client.post("/predict", files={"image": ("car.jpg", b"image", "image/jpeg")})
+    assert response.status_code == 500
+    assert "retry-after" not in response.headers
+    assert api.request_metrics.snapshot()["unavailable"]["image_processing_busy"] == 0
