@@ -66,6 +66,8 @@ The command-line trainer writes only to the ignored
 `training_runs/<run-name>/` directory and refuses to reuse an existing run
 name. It never replaces `best_car_model.keras`. Checkpoint selection uses
 validation accuracy; the test split is evaluated afterward for reporting only.
+Training and validation use disjoint partitions of one seeded, shuffled file
+index. Validation iteration stays unshuffled.
 Review the run's `metrics.json`, compatibility, and representative prediction
 equivalence separately before any manual runtime-selection decision. Copying a
 reviewed checkpoint to `best_car_model.keras` and updating

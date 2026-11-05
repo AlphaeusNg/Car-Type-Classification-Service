@@ -2327,3 +2327,19 @@ Validation: three regressions using the actual preprocessing wrapper failed
 with HTTP 400 before the fix and pass with HTTP 500 afterward. All 209
 warning-strict model-free pytest cases, pip check and Python compilation passed.
 Serving weights, manifest, mapping and Keras 3.10.0 are unchanged.
+
+## 2026-11-05 — Prevent candidate training/validation overlap
+
+Candidate training now requests both partitions from one seeded Keras file
+index. Separate calls previously shuffled the training index but kept the
+validation index sorted; slicing those different orders admitted validation
+images into training. Keras retains shuffled training iteration and unshuffled
+validation iteration with `subset="both"`. README records the disjoint split.
+Existing run metrics need independent reevaluation before being used as clean
+validation evidence; this change does not retrain or alter serving artifacts.
+
+Validation: a model-free indexing regression reproduced the overlap before the
+fix. All 210 warning-strict model-free pytest cases, pip check and Python
+compilation passed. A real installed-Keras smoke on 100 temporary PNGs confirmed
+90 training and 10 validation paths, disjoint and complete. Serving weights,
+manifest, class mapping and Keras 3.10.0 remain unchanged.

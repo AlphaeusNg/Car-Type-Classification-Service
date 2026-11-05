@@ -156,3 +156,41 @@ def test_training_tool_has_no_deployed_model_write_target():
     assert "PROMOTED_PATH" not in source
     assert "best_car_model.previous.keras" not in source
     assert "shutil.copy" not in source
+
+
+def test_training_and_validation_share_one_file_partition(monkeypatch):
+    """Model Keras indexing: shuffle happens before validation slicing."""
+    import random
+
+    tool = load_training_tool()
+    calls = []
+
+    class Dataset:
+        def __init__(self, paths):
+            self.file_paths = paths
+
+        def map(self, *args, **kwargs):
+            return self
+
+        def prefetch(self, *args):
+            return self
+
+    def load_directory(directory, **kwargs):
+        calls.append(kwargs)
+        paths = list(range(100))
+        if kwargs.get("shuffle"):
+            random.Random(kwargs["seed"]).shuffle(paths)
+        training, validation = Dataset(paths[:-10]), Dataset(paths[-10:])
+        if kwargs["subset"] == "both":
+            return training, validation
+        return training if kwargs["subset"] == "training" else validation
+
+    tool.keras = SimpleNamespace(utils=SimpleNamespace(image_dataset_from_directory=load_directory))
+    tool.tf = SimpleNamespace(data=SimpleNamespace(AUTOTUNE=object()))
+    monkeypatch.setattr(tool, "make_test_dataset", lambda *args: Dataset([]))
+    train, validation, _ = tool.make_datasets(["car"], batch_size=16, seed=123)
+
+    assert set(train.file_paths).isdisjoint(validation.file_paths)
+    assert set(train.file_paths) | set(validation.file_paths) == set(range(100))
+    assert len(calls) == 1
+    assert calls[0]["shuffle"] is True

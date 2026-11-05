@@ -253,20 +253,15 @@ def make_datasets(class_names: list[str], batch_size: int, seed: int):
         "batch_size": batch_size,
         "image_size": (IMAGE_SIZE, IMAGE_SIZE),
     }
-    train_ds = keras.utils.image_dataset_from_directory(
+    # Partition a single shuffled file index. Separate calls with different
+    # shuffle settings overlap because Keras shuffles before splitting.
+    # `both` keeps training shuffled and validation iteration unshuffled.
+    train_ds, val_ds = keras.utils.image_dataset_from_directory(
         TRAIN_DIR,
         shuffle=True,
         seed=seed,
         validation_split=0.1,
-        subset="training",
-        **common,
-    )
-    val_ds = keras.utils.image_dataset_from_directory(
-        TRAIN_DIR,
-        shuffle=False,
-        seed=seed,
-        validation_split=0.1,
-        subset="validation",
+        subset="both",
         **common,
     )
     test_ds = make_test_dataset(class_names, batch_size)
