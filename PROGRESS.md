@@ -2343,3 +2343,18 @@ fix. All 210 warning-strict model-free pytest cases, pip check and Python
 compilation passed. A real installed-Keras smoke on 100 temporary PNGs confirmed
 90 training and 10 validation paths, disjoint and complete. Serving weights,
 manifest, class mapping and Keras 3.10.0 remain unchanged.
+
+## 2026-11-06 — Stop queued lane work when shutdown starts
+
+Requests queued for preprocessing or inference now recheck shutdown when their
+lane worker starts. They receive the existing HTTP 503 model-not-ready response
+and return the acquired permit without starting new work. Previously a request
+that passed readiness before queuing could begin after the shutdown drain
+snapshot. Work already running retains its existing drain behavior.
+
+Validation: both queued-lane regressions returned HTTP 200 before the fix; they
+now assert HTTP 503, no worker start, permit recovery, no Retry-After, and a
+model-not-ready count without false overload counts. All 212 warning-strict
+model-free pytest cases, pip check and Python compilation passed. Existing
+cancellation, running-worker drain and restart journeys pass. Serving weights,
+manifest, class mapping and Keras 3.10.0 remain unchanged.

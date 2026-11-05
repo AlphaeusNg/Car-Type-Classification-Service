@@ -75,6 +75,10 @@ class LaneQueueTimeout(TimeoutError):
     """A lane permit was unavailable within its queue budget."""
 
 
+class LaneShuttingDown(Exception):
+    """Shutdown began before a queued lane operation could start."""
+
+
 class RequestBodyTooLarge(Exception):
     """Internal signal raised before multipart parsing exceeds its budget."""
 
@@ -167,6 +171,10 @@ async def run_holding_lane(semaphore, timeout, operation, on_wait=None):
 
     async def guarded():
         try:
+            # A request can have passed readiness before waiting for a permit.
+            # Recheck in the worker so queued work cannot outlive the drain.
+            if shutting_down.is_set():
+                raise LaneShuttingDown
             return await operation()
         finally:
             semaphore.release()
@@ -297,6 +305,9 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
             IMAGE_PROCESSING_QUEUE_TIMEOUT_SECONDS,
             preprocess_for_request,
         )
+    except LaneShuttingDown as exc:
+        request_metrics.record_unavailable("model_not_ready")
+        raise HTTPException(status_code=503, detail=DETAIL_MODEL_NOT_READY) from exc
     except LaneQueueTimeout as exc:
         request_metrics.record_unavailable("image_processing_busy")
         logger.warning(
@@ -338,6 +349,9 @@ async def predict_car_type(image: UploadFile = File(...)) -> Dict[str, Any]:
         )
         return {**decoded, "status": "success"}
 
+    except LaneShuttingDown as exc:
+        request_metrics.record_unavailable("model_not_ready")
+        raise HTTPException(status_code=503, detail=DETAIL_MODEL_NOT_READY) from exc
     except LaneQueueTimeout as exc:
         request_metrics.record_unavailable("prediction_queue_busy")
         logger.warning(

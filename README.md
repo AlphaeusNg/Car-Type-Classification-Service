@@ -213,6 +213,8 @@ curl -X POST "http://localhost:8000/predict" \
 
 `/health` also returns HTTP 503 once shutdown starts. New prediction requests
 receive the existing model-not-ready response while admitted lane work drains.
+Requests still queued for a lane also receive that response before starting
+preprocessing or inference when shutdown has begun.
 
 `/health` is a readiness check: it returns HTTP 503 until both the model and
 class mapping are loaded, input/output shapes match preprocessing and class

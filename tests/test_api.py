@@ -1056,3 +1056,59 @@ def test_real_preprocessor_operational_failures_are_server_errors(monkeypatch, f
     assert response.json()["detail"] == "Internal server error"
     assert "Retry-After" not in response.headers
     assert api.request_metrics.snapshot()["rejections"]["invalid_image"] == 0
+
+
+@pytest.mark.parametrize("lane", ["preprocessing", "inference"])
+def test_queued_work_cannot_start_after_shutdown_begins(monkeypatch, lane):
+    make_ready(monkeypatch)
+    starts = []
+    def preprocess(_data):
+        starts.append("preprocessing")
+        return np.zeros((1, 224, 224, 3))
+
+    def infer(*_args):
+        starts.append("inference")
+        return {"predicted_class": "car"}
+
+    monkeypatch.setattr(api, "preprocess_image", preprocess)
+    monkeypatch.setattr(api, "run_model_inference", infer)
+
+    async def scenario():
+        semaphore = asyncio.Semaphore(0)
+        waiting = asyncio.Event()
+        original_acquire = semaphore.acquire
+
+        async def acquire():
+            waiting.set()
+            return await original_acquire()
+
+        semaphore.acquire = acquire
+        name = (
+            "image_processing_semaphore"
+            if lane == "preprocessing"
+            else "prediction_semaphore"
+        )
+        monkeypatch.setattr(api, name, semaphore)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=api.app), base_url="http://test"
+        ) as client:
+            queued = asyncio.create_task(client.post(
+                "/predict", files={"image": ("car.png", b"image", "image/png")}
+            ))
+            await asyncio.wait_for(waiting.wait(), timeout=2)
+            api.shutting_down.set()
+            semaphore.release()
+            response = await queued
+        assert response.status_code == 503
+        assert response.json() == {"detail": api.DETAIL_MODEL_NOT_READY}
+        assert "retry-after" not in response.headers
+        assert lane not in starts
+        assert semaphore._value == 1
+        unavailable = api.request_metrics.snapshot()["unavailable"]
+        assert unavailable == {
+            "model_not_ready": 1,
+            "image_processing_busy": 0,
+            "prediction_queue_busy": 0,
+        }
+
+    asyncio.run(scenario())
