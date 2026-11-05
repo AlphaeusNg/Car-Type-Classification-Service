@@ -2313,3 +2313,17 @@ Validation: both worker-timeout regressions reproduced false 503 responses on
 the previous code; all 206 warning-strict model-free pytest cases, pip check
 and Python compilation passed after the fix. Existing saturation/cancellation/
 shutdown journeys pass. Weights, manifest, mapping and Keras pin are unchanged.
+
+
+## 2026-11-05 — Keep decoder operational failures on the server-error path
+
+Image preprocessing now translates expected image decoding/validation failures
+into invalid-image errors while allowing allocation, timeout and unexpected
+runtime failures to reach HTTP 500. These failures no longer blame the upload
+or increment the invalid-image counter. Malformed and unsupported image data
+retain HTTP 400. The API payload and overload retry behavior are unchanged.
+
+Validation: three regressions using the actual preprocessing wrapper failed
+with HTTP 400 before the fix and pass with HTTP 500 afterward. All 209
+warning-strict model-free pytest cases, pip check and Python compilation passed.
+Serving weights, manifest, mapping and Keras 3.10.0 are unchanged.
