@@ -282,6 +282,8 @@ except urllib.error.HTTPError as exc:
 Queue overload responses apply only while waiting for a lane permit. A timeout
 inside preprocessing or inference is an internal failure (HTTP 500), without
 a retry hint or an increment to the lane-busy counters.
+Unexpected decoder failures (including allocation errors) also return HTTP 500;
+malformed or unsupported image data retains HTTP 400.
 
 Busy model lane (HTTP 503). Retry only when `Retry-After` is present. A 503
 without that header, including `{"detail": "Model is not ready"}`, is not an

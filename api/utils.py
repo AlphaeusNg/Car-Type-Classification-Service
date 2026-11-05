@@ -123,8 +123,11 @@ def preprocess_image(image_data: bytes) -> np.ndarray:
         
         return image_array
         
-    except Exception as e:
-        raise ValueError(f"Failed to preprocess image: {str(e)}")
+    except TimeoutError:
+        # Operational failures belong to the server-error path.
+        raise
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as e:
+        raise ValueError(f"Failed to preprocess image: {str(e)}") from e
 
 def load_model(project_root: Path | None = None, model_loader=None) -> tf.keras.Model:
     """

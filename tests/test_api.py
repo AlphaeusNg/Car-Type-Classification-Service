@@ -1033,3 +1033,26 @@ def test_preprocessing_timeout_is_not_reported_as_queue_saturation(monkeypatch):
     assert response.status_code == 500
     assert "retry-after" not in response.headers
     assert api.request_metrics.snapshot()["unavailable"]["image_processing_busy"] == 0
+
+
+@pytest.mark.parametrize("failure", [
+    MemoryError("allocation failed"),
+    TimeoutError("decoder timed out"),
+    RuntimeError("decoder failed"),
+])
+def test_real_preprocessor_operational_failures_are_server_errors(monkeypatch, failure):
+    make_ready(monkeypatch)
+    monkeypatch.setattr(api, "preprocess_image", preprocess_image)
+
+    def fail_open(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(Image, "open", fail_open)
+    http = TestClient(api.app, raise_server_exceptions=False)
+    response = http.post(
+        "/predict", files={"image": ("car.png", b"image", "image/png")}
+    )
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Internal server error"
+    assert "Retry-After" not in response.headers
+    assert api.request_metrics.snapshot()["rejections"]["invalid_image"] == 0
